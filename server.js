@@ -65,6 +65,27 @@ app.post("/login", async (req, res) => {
     }
 });
 
+app.get("/app-version", async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT version, update_date
+            FROM aerodeck_versions
+            ORDER BY id DESC
+            LIMIT 1
+        `);
+
+        res.json({
+            success: true,
+            data: rows[0]
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
+
 app.listen(process.env.PORT, () => {
     console.log(
         `Server running on port ${process.env.PORT}`
