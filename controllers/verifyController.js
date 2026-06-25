@@ -4,7 +4,7 @@ const transporter = require("../config/mailer");
 const VERIFY_MODE = true;
 
 exports.requestVerify = async (req, res) => {
-
+  console.log("BODY =", req.body);
   try {
 
     const { founderId } = req.body;
@@ -40,21 +40,21 @@ exports.requestVerify = async (req, res) => {
 
     );
 
-    await transporter.sendMail({
+    // await transporter.sendMail({
 
-      from: process.env.MAIL_EMAIL,
+    //   from: process.env.MAIL_EMAIL,
 
-      to: "asminkuldeep6@gmail.com",
+    //   to: "asminkuldeep6@gmail.com",
 
-      subject: "AERODECK Founder Verification OTP",
+    //   subject: "AERODECK Founder Verification OTP",
 
-      html: `
-        <h2>Your OTP</h2>
-        <h1>${otp}</h1>
-        <p>Do not share this OTP.</p>
-      `
+    //   html: `
+    //     <h2>Your OTP</h2>
+    //     <h1>${otp}</h1>
+    //     <p>Do not share this OTP.</p>
+    //   `
 
-    });
+    // });
 
     return res.json({
 
@@ -72,7 +72,7 @@ exports.requestVerify = async (req, res) => {
 
       success: false,
 
-      message: "Verification Failed"
+      message: err.message
 
     });
 
