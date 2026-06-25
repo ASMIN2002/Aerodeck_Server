@@ -1,12 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
+const verifyRoutes = require("./routes/verifyRoutes");
 require("dotenv").config();
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/verify",verifyRoutes);
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -15,6 +17,7 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME
 });
+
 
 app.get("/", (req, res) => {
     res.send("AERODECK SERVER RUNNING");
