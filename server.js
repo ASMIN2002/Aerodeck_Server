@@ -4,13 +4,27 @@ require("dotenv").config();
 
 const verifyRoutes = require("./routes/verifyRoutes");
 const pool = require("./config/db");
+const uploadRoutes =
+    require("./routes/uploadRoutes");
+const founderRoutes =
+    require("./routes/founderRoutes");
 
 const app = express();
-console.log("🔥 SERVER.JS LOADED");
+
 app.use(cors());
 app.use(express.json());
 
 app.use("/api/verify", verifyRoutes);
+
+app.use(
+    "/api/upload",
+    uploadRoutes
+);
+
+app.use(
+"/api/founders",
+founderRoutes
+);
 
 app.get("/", (req, res) => {
 
@@ -25,7 +39,7 @@ app.get("/founders", async (req, res) => {
         const [rows] = await pool.query(
             "SELECT * FROM founders"
         );
-   
+
         res.json({
             success: true,
             data: rows
@@ -64,9 +78,7 @@ app.post("/login", async (req, res) => {
             ]
 
         );
-        console.log("LOGIN ROWS =", rows);
         if (rows.length > 0) {
-            console.log("LOGIN OK", rows[0].id);
             await pool.query(
                 `INSERT INTO founders_verify
                 (
@@ -88,11 +100,7 @@ app.post("/login", async (req, res) => {
                 )
                 ON DUPLICATE KEY UPDATE
 
-                    otp = NULL,
-                    is_verified = false,
-                    verified_at = NULL,
-                    expires_at = NULL,
-                    created_at = NOW()`,
+                        founder_id = founder_id`,
 
                 [
 
@@ -101,7 +109,6 @@ app.post("/login", async (req, res) => {
                 ]
 
             );
-            console.log("VERIFY ROW CREATED");
             res.json({
 
                 success: true,
@@ -176,9 +183,7 @@ app.get("/app-version", async (req, res) => {
 app.listen(process.env.PORT, () => {
 
     console.log(
-
         `Server running on port ${process.env.PORT}`
-
     );
 
 });

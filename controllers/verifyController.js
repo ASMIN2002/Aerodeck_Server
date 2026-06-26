@@ -4,10 +4,13 @@ const transporter = require("../config/mailer");
 const VERIFY_MODE = true;
 
 exports.requestVerify = async (req, res) => {
-  console.log("BODY =", req.body);
   try {
 
     const { founderId } = req.body;
+    console.log(
+      "Founder ID Received =",
+      founderId
+    );
 
     if (!founderId) {
 
@@ -40,21 +43,21 @@ exports.requestVerify = async (req, res) => {
 
     );
 
-    // await transporter.sendMail({
+    await transporter.sendMail({
 
-    //   from: process.env.MAIL_EMAIL,
+      from: process.env.MAIL_EMAIL,
 
-    //   to: "asminkuldeep6@gmail.com",
+      to: "asminkuldeep6@gmail.com",
 
-    //   subject: "AERODECK Founder Verification OTP",
+      subject: "AERODECK Founder Verification OTP",
 
-    //   html: `
-    //     <h2>Your OTP</h2>
-    //     <h1>${otp}</h1>
-    //     <p>Do not share this OTP.</p>
-    //   `
+      html: `
+        <h2>Your OTP</h2>
+        <h1>${otp}</h1>
+        <p>Do not share this OTP.</p>
+      `
 
-    // });
+    });
 
     return res.json({
 
@@ -79,6 +82,120 @@ exports.requestVerify = async (req, res) => {
   }
 
 };
+exports.verifyOTP = async (req, res) => {
+
+  try {
+
+    const {
+
+      founderId,
+
+      otp
+
+    } = req.body;
+
+    const [rows] = await pool.query(
+
+      `SELECT otp
+       FROM founders_verify
+       WHERE founder_id = ?`,
+
+      [
+
+        founderId
+
+      ]
+
+    );
+
+    if (
+
+      rows.length === 0
+
+    ) {
+
+      return res.json({
+
+        success: false,
+
+        message: "Founder Not Found"
+
+      });
+
+    }
+
+    if (
+
+      rows[0].otp !== otp
+
+    ) {
+
+      return res.json({
+
+        success: false,
+
+        message: "Invalid OTP"
+
+      });
+
+    }
+
+    await pool.query(
+
+      `UPDATE founders_verify
+SET
+is_verified = true,
+
+verified_at = DATE_ADD(
+UTC_TIMESTAMP(),
+INTERVAL 330 MINUTE
+),
+
+expires_at = DATE_ADD(
+DATE_ADD(
+UTC_TIMESTAMP(),
+INTERVAL 330 MINUTE
+),
+INTERVAL 24 HOUR
+)
+
+WHERE founder_id = ?`,
+
+      [
+
+        founderId
+
+      ]
+
+    );
+
+    return res.json({
+
+      success: true,
+
+      verified: rows[0].is_verified,
+
+      expiresAt: rows[0].expires_at
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.error(err);
+
+    return res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};
 
 exports.verifyStatus = async (req, res) => {
 
@@ -88,9 +205,11 @@ exports.verifyStatus = async (req, res) => {
 
     const [rows] = await pool.query(
 
-      `SELECT is_verified
-       FROM founders_verify
-       WHERE founder_id = ?`,
+      `SELECT
+   is_verified,
+   expires_at
+   FROM founders_verify
+   WHERE founder_id = ?`,
 
       [founderId]
 
@@ -106,10 +225,9 @@ exports.verifyStatus = async (req, res) => {
     }
 
     return res.json({
-
       success: true,
-
-      verified: rows[0].is_verified
+      verified: rows[0].is_verified,
+      expiresAt: rows[0].expires_at
 
     });
 
