@@ -207,6 +207,7 @@ exports.verifyStatus = async (req, res) => {
 
       `SELECT
    is_verified,
+   verified_at,
    expires_at
    FROM founders_verify
    WHERE founder_id = ?`,
@@ -229,7 +230,9 @@ exports.verifyStatus = async (req, res) => {
 
       verified: rows[0].is_verified,
 
-      verifiedAt: rows[0].verified_at
+      verifiedAt: rows[0].verified_at,
+
+      expiresAt: rows[0].expires_at
 
     });
 
