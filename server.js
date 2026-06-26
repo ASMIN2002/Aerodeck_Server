@@ -180,6 +180,57 @@ app.get("/app-version", async (req, res) => {
 
 });
 
+app.get("/api/founder/profile", async (req, res) => {
+
+  try {
+
+    const { founderId } = req.query;
+
+    const [rows] = await pool.query(
+
+      `SELECT
+        full_name,
+        profile_image
+      FROM founders
+      WHERE id = ?`,
+
+      [founderId]
+
+    );
+
+    if (rows.length === 0) {
+
+      return res.json({
+
+        success: false
+
+      });
+
+    }
+
+    res.json({
+
+      success: true,
+
+      founder: rows[0]
+
+    });
+
+  }
+
+  catch (err) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+});
 app.listen(process.env.PORT, () => {
 
     console.log(
