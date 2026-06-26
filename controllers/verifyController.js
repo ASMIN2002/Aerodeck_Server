@@ -223,11 +223,13 @@ exports.verifyStatus = async (req, res) => {
       });
 
     }
-
     return res.json({
+
       success: true,
+
       verified: rows[0].is_verified,
-      expiresAt: rows[0].expires_at
+
+      verifiedAt: rows[0].verified_at
 
     });
 
