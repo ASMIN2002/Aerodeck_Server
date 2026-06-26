@@ -1,7 +1,31 @@
 const cloudinary = require("../config/cloudinary");
 
 exports.uploadProfile = async (req, res) => {
+
   try {
+
+    console.log("===== UPLOAD REQUEST =====");
+
+    console.log("File Received:", !!req.file);
+
+    console.log(
+      "Cloud Name:",
+      process.env.CLOUDINARY_CLOUD_NAME
+    );
+
+    console.log(
+      "API Key:",
+      process.env.CLOUDINARY_API_KEY
+        ? "FOUND"
+        : "MISSING"
+    );
+
+    console.log(
+      "API Secret:",
+      process.env.CLOUDINARY_API_SECRET
+        ? "FOUND"
+        : "MISSING"
+    );
 
     if (!req.file) {
 
@@ -15,33 +39,35 @@ exports.uploadProfile = async (req, res) => {
 
     }
 
-    const result = await new Promise(
+    const result = await new Promise((resolve, reject) => {
 
-      (resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
 
-        const stream = cloudinary.uploader.upload_stream(
+        {
 
-          {
+          folder: "AERODECK/FOUNDERS"
 
-            folder: "AERODECK/FOUNDERS"
+        },
 
-          },
+        (err, result) => {
 
-          (err, result) => {
+          if (err) {
 
-            if (err) reject(err);
+            console.error("Cloudinary Error:", err);
 
-            else resolve(result);
+            return reject(err);
 
           }
 
-        );
+          resolve(result);
 
-        stream.end(req.file.buffer);
+        }
 
-      }
+      );
 
-    );
+      stream.end(req.file.buffer);
+
+    });
 
     return res.json({
 
@@ -54,6 +80,8 @@ exports.uploadProfile = async (req, res) => {
   }
 
   catch (err) {
+
+    console.error("UPLOAD FAILED");
 
     console.error(err);
 
