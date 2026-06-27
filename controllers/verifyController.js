@@ -215,6 +215,31 @@ exports.verifyStatus = async (req, res) => {
       [founderId]
 
     );
+    if (
+
+      rows.length > 0 &&
+
+      rows[0].is_verified &&
+
+      rows[0].expires_at &&
+
+      new Date(rows[0].expires_at) <= new Date()
+
+    ) {
+
+      await pool.query(
+
+        `UPDATE founders_verify
+     SET is_verified = 0
+     WHERE founder_id = ?`,
+
+        [founderId]
+
+      );
+
+      rows[0].is_verified = 0;
+
+    }
 
     if (rows.length === 0) {
       return res.json({
