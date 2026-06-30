@@ -9,6 +9,8 @@ const uploadRoutes =
 const founderRoutes =
     require("./routes/founderRoutes");
 
+const productsRoutes = require("./routes/products");
+
 const app = express();
 
 app.use(cors());
@@ -22,9 +24,11 @@ app.use(
 );
 
 app.use(
-"/api/founders",
-founderRoutes
+    "/api/founders",
+    founderRoutes
 );
+
+app.use("/api", productsRoutes);
 
 app.get("/", (req, res) => {
 
@@ -182,53 +186,53 @@ app.get("/app-version", async (req, res) => {
 
 app.get("/api/founder/profile", async (req, res) => {
 
-  try {
+    try {
 
-    const { founderId } = req.query;
+        const { founderId } = req.query;
 
-    const [rows] = await pool.query(
+        const [rows] = await pool.query(
 
-      `SELECT
+            `SELECT
         full_name,
         profile_image
       FROM founders
       WHERE id = ?`,
 
-      [founderId]
+            [founderId]
 
-    );
+        );
 
-    if (rows.length === 0) {
+        if (rows.length === 0) {
 
-      return res.json({
+            return res.json({
 
-        success: false
+                success: false
 
-      });
+            });
+
+        }
+
+        res.json({
+
+            success: true,
+
+            founder: rows[0]
+
+        });
 
     }
 
-    res.json({
+    catch (err) {
 
-      success: true,
+        res.status(500).json({
 
-      founder: rows[0]
+            success: false,
 
-    });
+            message: err.message
 
-  }
+        });
 
-  catch (err) {
-
-    res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
+    }
 
 });
 app.listen(process.env.PORT, () => {
