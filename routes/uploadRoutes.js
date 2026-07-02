@@ -3,22 +3,33 @@ const express = require("express");
 const router = express.Router();
 
 const upload =
-require("../config/multer");
+    require("../config/multer");
 
 const {
 
-uploadProfile
+    uploadProfile,
+
+    uploadProduct
 
 } =
-require("../controllers/uploadController");
 
+    require("../controllers/uploadController");
 router.post(
 
-"/profile",
+    "/product",
 
-upload.single("image"),
+    upload.single("image"),
 
-uploadProfile
+    uploadProduct
+
+);
+router.post(
+
+    "/profile",
+
+    upload.single("image"),
+
+    uploadProfile
 
 );
 
