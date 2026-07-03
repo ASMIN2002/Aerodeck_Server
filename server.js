@@ -162,6 +162,39 @@ app.get("/api/founder/profile", async (req, res) => {
     }
 
 });
+
+app.get("/api/users", async (req, res) => {
+    try {
+
+        const [rows] = await pool.query(`
+            SELECT
+                user_id,
+                full_name,
+                mobile_number,
+                email,
+                is_mobile_verified,
+                is_email_verified,
+                created_at
+            FROM User_Aerodeck
+            ORDER BY user_id DESC
+        `);
+
+        res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+});
 app.listen(process.env.PORT, () => {
 
     console.log(
