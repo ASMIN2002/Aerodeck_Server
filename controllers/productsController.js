@@ -102,6 +102,87 @@ const addProduct = async (req, res) => {
     }
 
 };
+const addOffer = async (req, res) => {
+
+    try {
+
+        const {
+
+            offer_name,
+            offer_description,
+            offer_demo_price,
+            offer_discount_percentage,
+            offer_highlight_text,
+            offer_price,
+            offer_image1,
+            offer_image2,
+            offer_image3,
+            offer_status,
+            offer_expired_at
+
+        } = req.body;
+
+        await db.query(
+
+            `INSERT INTO Products_Offer_Aerodeck (
+
+                offer_name,
+                offer_description,
+                offer_demo_price,
+                offer_discount_percentage,
+                offer_highlight_text,
+                offer_price,
+                offer_image1,
+                offer_image2,
+                offer_image3,
+                offer_status,
+                offer_expired_at
+
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
+            [
+
+                offer_name,
+                offer_description,
+                offer_demo_price,
+                offer_discount_percentage,
+                offer_highlight_text,
+                offer_price,
+                offer_image1,
+                offer_image2,
+                offer_image3,
+                offer_status,
+                offer_expired_at
+
+            ]
+
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "Offer Added Successfully"
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+};
 
 const getProducts = async (req, res) => {
 
@@ -259,6 +340,174 @@ WHERE product_id = ?`,
     }
 
 };
+const updateOfferStatus = async (req, res) => {
+
+    try {
+
+        const {
+
+            offer_id,
+
+            offer_status
+
+        } = req.body;
+
+        await db.query(
+
+            `UPDATE Products_Offer_Aerodeck
+
+             SET offer_status = ?
+
+             WHERE offer_id = ?`,
+
+            [
+
+                offer_status,
+
+                offer_id
+
+            ]
+
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "Offer Status Updated"
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+};
+const deleteOffer = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const [rows] = await db.query(
+
+            `SELECT
+
+                offer_image1,
+                offer_image2,
+                offer_image3
+
+            FROM Products_Offer_Aerodeck
+
+            WHERE offer_id = ?`,
+
+            [id]
+
+        );
+
+        if (rows.length === 0) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Offer Not Found"
+
+            });
+
+        }
+
+        const offer = rows[0];
+
+        if (offer.offer_image1) {
+
+            await cloudinary.uploader.destroy(
+
+                getPublicId(
+
+                    offer.offer_image1
+
+                )
+
+            );
+
+        }
+
+        if (offer.offer_image2) {
+
+            await cloudinary.uploader.destroy(
+
+                getPublicId(
+
+                    offer.offer_image2
+
+                )
+
+            );
+
+        }
+
+        if (offer.offer_image3) {
+
+            await cloudinary.uploader.destroy(
+
+                getPublicId(
+
+                    offer.offer_image3
+
+                )
+
+            );
+
+        }
+
+        await db.query(
+
+            `DELETE FROM Products_Offer_Aerodeck
+
+             WHERE offer_id = ?`,
+
+            [id]
+
+        );
+
+        return res.json({
+
+            success: true,
+
+            message: "Offer Deleted Successfully"
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+};
 
 const deleteProduct = async (req, res) => {
 
@@ -369,6 +618,9 @@ module.exports = {
     getProducts,
     getOffers,
     addProduct,
+    addOffer,
     updateProduct,
-    deleteProduct
+    deleteProduct,
+    updateOfferStatus,
+    deleteOffer
 };
