@@ -170,3 +170,42 @@ exports.createFounder = async (req, res) => {
     }
 
 };
+exports.updateProfileImage = async (req, res) => {
+
+  try {
+
+    const { founderId, profile_image } = req.body;
+
+    await db.query(
+
+      `UPDATE founders
+       SET profile_image = ?
+       WHERE id = ?`,
+
+      [profile_image, founderId]
+
+    );
+
+    res.json({
+
+      success: true
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.log(err);
+
+    res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};
