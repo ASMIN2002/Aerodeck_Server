@@ -163,6 +163,46 @@ app.get("/api/founder/profile", async (req, res) => {
 
 });
 
+app.put("/api/founder/profile-image", async (req, res) => {
+
+    try {
+
+        const { founderId, profile_image } = req.body;
+
+        await pool.query(
+
+            `UPDATE founders
+             SET profile_image = ?
+             WHERE id = ?`,
+
+            [profile_image, founderId]
+
+        );
+
+        res.json({
+
+            success: true
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+});
+
 app.get("/api/users", async (req, res) => {
     try {
 

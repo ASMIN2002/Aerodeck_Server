@@ -172,40 +172,39 @@ exports.createFounder = async (req, res) => {
 };
 exports.updateProfileImage = async (req, res) => {
 
-  try {
+    try {
 
-    const { founderId, profile_image } = req.body;
+        const { founderId, profile_image } = req.body;
+        await pool.query(
 
-    await db.query(
+            `UPDATE founders
+   SET profile_image = ?
+   WHERE id = ?`,
 
-      `UPDATE founders
-       SET profile_image = ?
-       WHERE id = ?`,
+            [profile_image, founderId]
 
-      [profile_image, founderId]
+        );
 
-    );
+        res.json({
 
-    res.json({
+            success: true
 
-      success: true
+        });
 
-    });
+    }
 
-  }
+    catch (err) {
 
-  catch (err) {
+        console.log(err);
 
-    console.log(err);
+        res.status(500).json({
 
-    res.status(500).json({
+            success: false,
 
-      success: false,
+            message: err.message
 
-      message: err.message
+        });
 
-    });
-
-  }
+    }
 
 };

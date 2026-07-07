@@ -24,28 +24,7 @@ exports.uploadProfile = async (req, res) => {
 
   try {
 
-    console.log("===== UPLOAD REQUEST =====");
-
-    console.log("File Received:", !!req.file);
-
-    console.log(
-      "Cloud Name:",
-      process.env.CLOUDINARY_CLOUD_NAME
-    );
-
-    console.log(
-      "API Key:",
-      process.env.CLOUDINARY_API_KEY
-        ? "FOUND"
-        : "MISSING"
-    );
-
-    console.log(
-      "API Secret:",
-      process.env.CLOUDINARY_API_SECRET
-        ? "FOUND"
-        : "MISSING"
-    );
+    const founderId = req.body.founderId;
 
     if (!req.file) {
 
@@ -56,6 +35,53 @@ exports.uploadProfile = async (req, res) => {
         message: "No Image Selected"
 
       });
+
+    }
+    if (founderId) {
+
+      const [rows] = await db.query(
+
+        `SELECT profile_image
+     FROM founders
+     WHERE id = ?`,
+
+        [founderId]
+
+      );
+
+      if (
+
+        rows.length > 0 &&
+
+        rows[0].profile_image
+
+      ) {
+
+        const publicId = getPublicId(
+
+          rows[0].profile_image
+
+        );
+
+        if (publicId) {
+
+          await cloudinary.uploader.destroy(
+
+            publicId
+
+          );
+
+          console.log(
+
+            "OLD PROFILE IMAGE DELETED:",
+
+            publicId
+
+          );
+
+        }
+
+      }
 
     }
 
