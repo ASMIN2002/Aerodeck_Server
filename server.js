@@ -6,6 +6,8 @@ const uploadRoutes =
     require("./routes/uploadRoutes");
 
 const productsRoutes = require("./routes/products");
+const founderRoutes =
+    require("./routes/founderRoutes");
 
 const app = express();
 
@@ -15,6 +17,11 @@ app.use(express.json());
 app.use(
     "/api/upload",
     uploadRoutes
+);
+
+app.use(
+    "/api/founders",
+    founderRoutes
 );
 
 app.use("/api", productsRoutes);

@@ -3,56 +3,18 @@ const express = require("express");
 const router = express.Router();
 
 const {
-
-  createFounder,
-
-  sendFounderOtp,
-
-  verifyFounderOtp,
-
-  sendOwnerOtp,
-
-  verifyOwnerOtp
-
+    createFounder,
+    updateProfileImage
 } = require("../controllers/founderController");
 
 router.post(
-
-  "/send-email-otp",
-
-  sendFounderOtp
-
+    "/create",
+    createFounder
 );
 
-router.post(
-
-  "/create",
-
-  createFounder
-
-);
-
-router.post(
-
-  "/verify-email-otp",
-
-  verifyFounderOtp
-
-);
-router.post(
-
-    "/send-owner-otp",
-
-    sendOwnerOtp
-
-);
-
-router.post(
-
-    "/verify-owner-otp",
-
-    verifyOwnerOtp
-
+router.put(
+    "/profile-image",
+    updateProfileImage
 );
 
 module.exports = router;
