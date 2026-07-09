@@ -242,6 +242,40 @@ app.get("/api/users", async (req, res) => {
 
     }
 });
+app.get("/api/offers/count", async (req, res) => {
+
+    try {
+
+        const [rows] = await pool.query(
+
+            `SELECT COUNT(*) AS totalOffers
+             FROM Products_Offer_Aerodeck`
+
+        );
+
+        res.json({
+
+            success: true,
+
+            totalOffers: rows[0].totalOffers
+
+        });
+
+    }
+
+    catch (err) {
+
+        res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+});
 app.listen(process.env.PORT, () => {
 
     console.log(
