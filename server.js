@@ -2,29 +2,37 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const pool = require("./config/db");
-const uploadRoutes =
-    require("./routes/uploadRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 
 const productsRoutes = require("./routes/products");
-const founderRoutes =
-    require("./routes/founderRoutes");
+const founderRoutes = require("./routes/founderRoutes");
+const authRoutes = require("./routes/authRoutes");
+
+
+// USER
+const userProductsRoutes = require("./routes/user/products");
+const wishlistRoutes = require("./routes/user/wishlist");
+const cartRoutes = require("./routes/user/cart");
+const likesRoutes = require("./routes/user/likes");
+
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
-
-app.use(
-    "/api/upload",
-    uploadRoutes
-);
-
-app.use(
-    "/api/founders",
-    founderRoutes
-);
-
+app.use("/api/upload", uploadRoutes);
+app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
+app.use("/api/auth", authRoutes);
+
+
+// USER
+app.use("/api/user", userProductsRoutes);
+app.use("/api/user", wishlistRoutes);
+app.use("/api/user", cartRoutes);
+app.use("/api/user", likesRoutes);
+
+
+
 
 app.get("/", (req, res) => {
 
