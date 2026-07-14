@@ -35,6 +35,7 @@ const addProduct = async (req, res) => {
             product_image1,
             product_image2,
             product_image3,
+            product_image4,
             product_status
 
         } = req.body;
@@ -53,11 +54,12 @@ const addProduct = async (req, res) => {
                 product_image1,
                 product_image2,
                 product_image3,
+                product_image4,
                 product_total_likes,
                 product_rating,
                 product_status
 
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
 
@@ -71,6 +73,7 @@ const addProduct = async (req, res) => {
                 product_image1,
                 product_image2,
                 product_image3,
+                product_image4,
                 0,
                 0,
                 product_status
@@ -241,10 +244,12 @@ const updateProduct = async (req, res) => {
             product_image1,
             product_image2,
             product_image3,
+            product_image4,
 
             product_image1_public_id,
             product_image2_public_id,
             product_image3_public_id,
+            product_image4_public_id,
 
             product_status
 
@@ -288,6 +293,9 @@ product_image2_public_id = ?,
 product_image3 = ?,
 product_image3_public_id = ?,
 
+product_image4 = ?,
+product_image4_public_id = ?,
+
 product_status = ?
 WHERE product_id = ?`,
 
@@ -308,6 +316,9 @@ WHERE product_id = ?`,
 
                 product_image3,
                 product_image3_public_id,
+
+                product_image4,
+                product_image4_public_id,
 
                 product_status,
                 product_id
@@ -520,7 +531,8 @@ const deleteProduct = async (req, res) => {
             `SELECT
         product_image1,
         product_image2,
-        product_image3
+        product_image3,
+         product_image4
      FROM Products_Aerodeck
      WHERE product_id = ?`,
 
@@ -566,6 +578,16 @@ const deleteProduct = async (req, res) => {
             await cloudinary.uploader.destroy(
 
                 getPublicId(product.product_image3)
+
+            );
+
+        }
+
+        if (product.product_image4) {
+
+            await cloudinary.uploader.destroy(
+
+                getPublicId(product.product_image4)
 
             );
 

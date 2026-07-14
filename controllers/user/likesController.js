@@ -109,6 +109,21 @@ exports.likeProduct = async (req, res) => {
 
         );
 
+        await pool.query(
+
+            `UPDATE Products_Aerodeck
+     SET product_total_likes = product_total_likes + 1
+     WHERE product_id = ?`,
+
+            [
+
+                product_id
+
+            ]
+
+        );
+
+
         res.json({
 
             success: true,
@@ -157,6 +172,19 @@ exports.unlikeProduct = async (req, res) => {
             [
 
                 user_id,
+
+                productId
+
+            ]
+
+        );
+        await pool.query(
+
+            `UPDATE Products_Aerodeck
+     SET product_total_likes = GREATEST(product_total_likes - 1, 0)
+     WHERE product_id = ?`,
+
+            [
 
                 productId
 

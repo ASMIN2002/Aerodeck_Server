@@ -66,6 +66,8 @@ exports.addToCart = async (req, res) => {
 
         } = req.body;
 
+        const finalQuantity = quantity < 50 ? 50 : quantity;
+
         const [exists] = await pool.query(
 
             `SELECT *
@@ -101,7 +103,7 @@ exports.addToCart = async (req, res) => {
 
                 product_id,
 
-                quantity
+                finalQuantity
 
             ]
 
@@ -151,6 +153,8 @@ exports.updateQuantity = async (req, res) => {
 
         } = req.body;
 
+        const finalQuantity = quantity < 50 ? 50 : quantity;
+
         await pool.query(
 
             `UPDATE User_Cart_Aerodeck
@@ -160,7 +164,7 @@ exports.updateQuantity = async (req, res) => {
 
             [
 
-                quantity,
+                finalQuantity,
 
                 user_id,
 

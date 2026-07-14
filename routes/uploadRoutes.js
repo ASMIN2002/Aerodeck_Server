@@ -9,8 +9,9 @@ const {
 
     uploadProfile,
 
-    uploadProduct
+    uploadProduct,
 
+    uploadGift
 } =
 
     require("../controllers/uploadController");
@@ -23,6 +24,17 @@ router.post(
     uploadProduct
 
 );
+
+router.post(
+
+    "/gift",
+
+    upload.single("image"),
+
+    uploadGift
+
+);
+
 router.post(
 
     "/profile",

@@ -91,6 +91,17 @@ exports.saveProduct = async (req, res) => {
 
         );
 
+        await pool.query(
+
+            `UPDATE Products_Aerodeck
+     SET product_total_saves = product_total_saves + 1
+     WHERE product_id = ?`,
+
+            [product_id]
+
+        );
+
+
         res.json({
 
             success: true,
@@ -136,6 +147,16 @@ exports.removeProduct = async (req, res) => {
              AND product_id = ?`,
 
             [user_id, productId]
+
+        );
+
+        await pool.query(
+
+            `UPDATE Products_Aerodeck
+     SET product_total_saves = GREATEST(product_total_saves - 1, 0)
+     WHERE product_id = ?`,
+
+            [productId]
 
         );
 

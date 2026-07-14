@@ -1,24 +1,25 @@
 const pool = require("../../config/db");
 
-exports.getProducts = async (req, res) => {
+exports.getOffers = async (req, res) => {
 
     try {
 
         const [rows] = await pool.query(`
             SELECT
-    product_id,
-    product_name,
-    product_highlight_text,
-    product_demo_price,
-    product_discount_percentage,
-    product_price,
-    product_image1,
-    product_total_likes,
-    product_total_saves,
-    product_rating,
-    product_status
-FROM Products_Aerodeck
-ORDER BY product_id DESC
+offer_id,
+offer_name,
+offer_description,
+offer_demo_price,
+offer_discount_percentage,
+offer_highlight_text,
+offer_price,
+offer_image1,
+offer_image2,
+offer_image3,
+offer_status,
+offer_expired_at
+FROM Products_Offer_Aerodeck
+ORDER BY offer_id DESC;
         `);
 
         res.json({

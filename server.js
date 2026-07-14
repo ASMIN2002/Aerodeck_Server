@@ -7,6 +7,7 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const productsRoutes = require("./routes/products");
 const founderRoutes = require("./routes/founderRoutes");
 const authRoutes = require("./routes/authRoutes");
+const giftRoutes = require("./routes/giftRoutes");
 
 
 // USER
@@ -23,6 +24,7 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/gifts", giftRoutes);
 
 
 // USER
