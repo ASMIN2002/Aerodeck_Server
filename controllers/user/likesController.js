@@ -49,7 +49,7 @@ exports.getLikes = async (req, res) => {
 };
 
 // ==============================
-// LIKE PRODUCT
+// LIKE
 // ==============================
 
 exports.likeProduct = async (req, res) => {
@@ -59,7 +59,6 @@ exports.likeProduct = async (req, res) => {
         const {
 
             user_id,
-
             product_id
 
         } = req.body;
@@ -74,7 +73,6 @@ exports.likeProduct = async (req, res) => {
             [
 
                 user_id,
-
                 product_id
 
             ]
@@ -86,8 +84,7 @@ exports.likeProduct = async (req, res) => {
             return res.json({
 
                 success: false,
-
-                message: "Product already liked."
+                message: "Already liked."
 
             });
 
@@ -102,33 +99,61 @@ exports.likeProduct = async (req, res) => {
             [
 
                 user_id,
-
                 product_id
 
             ]
 
         );
 
-        await pool.query(
+        // ==========================
+        // GIFT
+        // ==========================
 
-            `UPDATE Products_Aerodeck
-     SET product_total_likes = product_total_likes + 1
-     WHERE product_id = ?`,
+        if (String(product_id).startsWith("G")) {
 
-            [
+            await pool.query(
 
-                product_id
+                `UPDATE Gifts_Aerodeck
+                 SET gift_total_likes = gift_total_likes + 1
+                 WHERE gift_id = ?`,
 
-            ]
+                [
 
-        );
+                    product_id
 
+                ]
+
+            );
+
+        }
+
+        // ==========================
+        // CARD
+        // ==========================
+
+        else {
+
+            await pool.query(
+
+                `UPDATE Products_Aerodeck
+                 SET product_total_likes = product_total_likes + 1
+                 WHERE product_id = ?`,
+
+                [
+
+                    product_id
+
+                ]
+
+            );
+
+        }
 
         res.json({
 
             success: true,
 
-            message: "Product liked successfully."
+            message: "Liked successfully."
 
         });
 
@@ -151,7 +176,7 @@ exports.likeProduct = async (req, res) => {
 };
 
 // ==============================
-// UNLIKE PRODUCT
+// UNLIKE
 // ==============================
 
 exports.unlikeProduct = async (req, res) => {
@@ -172,31 +197,63 @@ exports.unlikeProduct = async (req, res) => {
             [
 
                 user_id,
-
                 productId
 
             ]
 
         );
-        await pool.query(
 
-            `UPDATE Products_Aerodeck
-     SET product_total_likes = GREATEST(product_total_likes - 1, 0)
-     WHERE product_id = ?`,
+        // ==========================
+        // GIFT
+        // ==========================
 
-            [
+        if (String(productId).startsWith("G")) {
 
-                productId
+            await pool.query(
 
-            ]
+                `UPDATE Gifts_Aerodeck
+                 SET gift_total_likes =
+                 GREATEST(gift_total_likes - 1, 0)
+                 WHERE gift_id = ?`,
 
-        );
+                [
+
+                    productId
+
+                ]
+
+            );
+
+        }
+
+        // ==========================
+        // CARD
+        // ==========================
+
+        else {
+
+            await pool.query(
+
+                `UPDATE Products_Aerodeck
+                 SET product_total_likes =
+                 GREATEST(product_total_likes - 1, 0)
+                 WHERE product_id = ?`,
+
+                [
+
+                    productId
+
+                ]
+
+            );
+
+        }
 
         res.json({
 
             success: true,
 
-            message: "Product unliked successfully."
+            message: "Unlike successfully."
 
         });
 

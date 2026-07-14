@@ -411,3 +411,268 @@ exports.uploadGift = async (req, res) => {
   }
 
 };
+
+exports.uploadPremium = async (req, res) => {
+
+  try {
+
+    if (!req.file) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "No Image Selected"
+
+      });
+
+    }
+
+    const {
+      premium_id,
+      image_no
+    } = req.body;
+
+    const [rows] = await db.query(
+
+      `SELECT
+        premium_image1,
+        premium_image2,
+        premium_image3,
+        premium_image4
+      FROM Premium_Aerodeck
+      WHERE premium_id = ?`,
+
+      [premium_id]
+
+    );
+
+    if (rows.length > 0) {
+
+      const oldUrl = rows[0][`premium_image${image_no}`];
+
+      if (oldUrl) {
+
+        const publicId = getPublicId(oldUrl);
+
+        if (publicId) {
+
+          await cloudinary.uploader.destroy(publicId);
+
+          console.log("OLD IMAGE DELETED:", publicId);
+
+        }
+
+      }
+
+    }
+
+    if (!premium_id || !image_no) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "Premium ID & Image No Required"
+
+      });
+
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+
+        {
+
+          folder: "AERODECK/PREMIUM",
+
+          public_id: `premium_${premium_id}_image${image_no}`,
+
+          overwrite: true,
+
+          invalidate: true,
+
+          resource_type: "image"
+
+        },
+
+        (err, result) => {
+
+          if (err) {
+
+            return reject(err);
+
+          }
+
+          resolve(result);
+
+        }
+
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    console.log("PUBLIC ID:", result.public_id);
+    console.log("OVERWRITE RESULT:", result);
+    console.log("URL:", result.secure_url);
+
+    return res.json({
+
+      success: true,
+      url: result.secure_url,
+      public_id: result.public_id
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.log(err);
+
+    return res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};
+exports.uploadShop = async (req, res) => {
+
+  try {
+
+    if (!req.file) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "No Image Selected"
+
+      });
+
+    }
+
+    const {
+      shop_id,
+      image_no
+    } = req.body;
+
+    const [rows] = await db.query(
+
+      `SELECT
+        shop_image1,
+        shop_image2,
+        shop_image3,
+        shop_image4
+      FROM Shop_Aerodeck
+      WHERE shop_id = ?`,
+
+      [shop_id]
+
+    );
+
+    if (rows.length > 0) {
+
+      const oldUrl = rows[0][`shop_image${image_no}`];
+
+      if (oldUrl) {
+
+        const publicId = getPublicId(oldUrl);
+
+        if (publicId) {
+
+          await cloudinary.uploader.destroy(publicId);
+
+          console.log("OLD IMAGE DELETED:", publicId);
+
+        }
+
+      }
+
+    }
+
+    if (!shop_id || !image_no) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "Shop ID & Image No Required"
+
+      });
+
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+
+        {
+
+          folder: "AERODECK/SHOP",
+
+          public_id: `shop_${shop_id}_image${image_no}`,
+
+          overwrite: true,
+
+          invalidate: true,
+
+          resource_type: "image"
+
+        },
+
+        (err, result) => {
+
+          if (err) {
+
+            return reject(err);
+
+          }
+
+          resolve(result);
+
+        }
+
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    console.log("PUBLIC ID:", result.public_id);
+    console.log("OVERWRITE RESULT:", result);
+    console.log("URL:", result.secure_url);
+
+    return res.json({
+
+      success: true,
+      url: result.secure_url,
+      public_id: result.public_id
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.log(err);
+
+    return res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};

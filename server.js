@@ -8,13 +8,16 @@ const productsRoutes = require("./routes/products");
 const founderRoutes = require("./routes/founderRoutes");
 const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
+const premiumRoutes = require("./routes/premiumRoutes");
+const shopRoutes = require("./routes/shopRoutes");
 
 
 // USER
-const userProductsRoutes = require("./routes/user/products");
+const userProductRoutes = require("./routes/user/userProducts");
 const wishlistRoutes = require("./routes/user/wishlist");
 const cartRoutes = require("./routes/user/cart");
 const likesRoutes = require("./routes/user/likes");
+const userGiftRoutes = require("./routes/user/userGiftRoutes");
 
 
 const app = express();
@@ -25,14 +28,17 @@ app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/gifts", giftRoutes);
+app.use("/api/premium", premiumRoutes);
+app.use("/api/shop", shopRoutes);
+
 
 
 // USER
-app.use("/api/user", userProductsRoutes);
+app.use("/api/user", userProductRoutes);
 app.use("/api/user", wishlistRoutes);
 app.use("/api/user", cartRoutes);
 app.use("/api/user", likesRoutes);
-
+app.use("/api/user", userGiftRoutes);
 
 
 

@@ -11,10 +11,15 @@ const {
 
     uploadProduct,
 
-    uploadGift
-} =
+    uploadGift,
 
-    require("../controllers/uploadController");
+    uploadPremium,
+
+    uploadShop
+
+} = require("../controllers/uploadController");
+
+
 router.post(
 
     "/product",
@@ -32,6 +37,26 @@ router.post(
     upload.single("image"),
 
     uploadGift
+
+);
+
+router.post(
+
+    "/premium",
+
+    upload.single("image"),
+
+    uploadPremium
+
+);
+
+router.post(
+
+    "/shop",
+
+    upload.single("image"),
+
+    uploadShop
 
 );
 
