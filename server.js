@@ -76,6 +76,18 @@ app.get("/founders", async (req, res) => {
 
 });
 
+app.get("/health", (req, res) => {
+
+    res.status(200).json({
+
+        success: true,
+
+        status: "OK"
+
+    });
+
+});
+
 app.post("/login", async (req, res) => {
     try {
         const { username, password } = req.body;
