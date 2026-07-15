@@ -1,6 +1,6 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
 const pool = require("./config/db");
 const uploadRoutes = require("./routes/uploadRoutes");
 
