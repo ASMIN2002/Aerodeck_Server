@@ -126,6 +126,32 @@ exports.likeProduct = async (req, res) => {
             );
 
         }
+        else if (String(product_id).startsWith("S")) {
+
+            await pool.query(
+
+                `UPDATE Shop_Aerodeck
+         SET shop_total_likes = shop_total_likes + 1
+         WHERE shop_id = ?`,
+
+                [product_id]
+
+            );
+
+        }
+        else if (String(product_id).startsWith("P")) {
+
+            await pool.query(
+
+                `UPDATE Premium_Aerodeck
+         SET premium_total_likes = premium_total_likes + 1
+         WHERE premium_id = ?`,
+
+                [product_id]
+
+            );
+
+        }
 
         // ==========================
         // CARD
@@ -221,6 +247,34 @@ exports.unlikeProduct = async (req, res) => {
                     productId
 
                 ]
+
+            );
+
+        }
+        else if (String(productId).startsWith("S")) {
+
+            await pool.query(
+
+                `UPDATE Shop_Aerodeck
+         SET shop_total_likes =
+         GREATEST(shop_total_likes - 1, 0)
+         WHERE shop_id = ?`,
+
+                [productId]
+
+            );
+
+        }
+        else if (String(productId).startsWith("P")) {
+
+            await pool.query(
+
+                `UPDATE Premium_Aerodeck
+         SET premium_total_likes =
+         GREATEST(premium_total_likes - 1, 0)
+         WHERE premium_id = ?`,
+
+                [productId]
 
             );
 

@@ -90,16 +90,60 @@ exports.saveProduct = async (req, res) => {
             [user_id, product_id]
 
         );
+        if (String(product_id).startsWith("G")) {
 
-        await pool.query(
+            await pool.query(
 
-            `UPDATE Products_Aerodeck
-     SET product_total_saves = product_total_saves + 1
-     WHERE product_id = ?`,
+                `UPDATE Gifts_Aerodeck
+         SET gift_total_saves = gift_total_saves + 1
+         WHERE gift_id = ?`,
 
-            [product_id]
+                [product_id]
 
-        );
+            );
+
+        }
+
+        else if (String(product_id).startsWith("S")) {
+
+            await pool.query(
+
+                `UPDATE Shop_Aerodeck
+         SET shop_total_saves = shop_total_saves + 1
+         WHERE shop_id = ?`,
+
+                [product_id]
+
+            );
+
+        }
+        else if (String(product_id).startsWith("P")) {
+
+            await pool.query(
+
+                `UPDATE Premium_Aerodeck
+         SET premium_total_saves = premium_total_saves + 1
+         WHERE premium_id = ?`,
+
+                [product_id]
+
+            );
+
+        }
+
+        else {
+
+            await pool.query(
+
+                `UPDATE Products_Aerodeck
+         SET product_total_saves = product_total_saves + 1
+         WHERE product_id = ?`,
+
+                [product_id]
+
+            );
+
+        }
 
 
         res.json({
@@ -150,15 +194,66 @@ exports.removeProduct = async (req, res) => {
 
         );
 
-        await pool.query(
+        if (String(productId).startsWith("G")) {
 
-            `UPDATE Products_Aerodeck
-     SET product_total_saves = GREATEST(product_total_saves - 1, 0)
-     WHERE product_id = ?`,
+            await pool.query(
 
-            [productId]
+                `UPDATE Gifts_Aerodeck
+         SET gift_total_saves =
+         GREATEST(gift_total_saves - 1, 0)
+         WHERE gift_id = ?`,
 
-        );
+                [productId]
+
+            );
+
+        }
+
+
+        else if (String(productId).startsWith("S")) {
+
+            await pool.query(
+
+                `UPDATE Shop_Aerodeck
+         SET shop_total_saves =
+         GREATEST(shop_total_saves - 1, 0)
+         WHERE shop_id = ?`,
+
+                [productId]
+
+            );
+
+        }
+
+        else if (String(productId).startsWith("P")) {
+
+            await pool.query(
+
+                `UPDATE Premium_Aerodeck
+         SET premium_total_saves =
+         GREATEST(premium_total_saves - 1, 0)
+         WHERE premium_id = ?`,
+
+                [productId]
+
+            );
+
+        }
+
+        else {
+
+            await pool.query(
+
+                `UPDATE Products_Aerodeck
+         SET product_total_saves =
+         GREATEST(product_total_saves - 1, 0)
+         WHERE product_id = ?`,
+
+                [productId]
+
+            );
+
+        }
 
         res.json({
 

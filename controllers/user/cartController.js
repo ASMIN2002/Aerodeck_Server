@@ -67,13 +67,17 @@ exports.addToCart = async (req, res) => {
         } = req.body;
 
         let finalQuantity;
+        
+        const id = String(product_id);
 
-        if (String(product_id).startsWith("G")) {
+        if (id.startsWith("G") || id.startsWith("S")) {
 
+            // Gift + Shop
             finalQuantity = quantity < 1 ? 1 : quantity;
 
         } else {
 
+            // Cards + Premium
             finalQuantity = quantity < 50 ? 50 : quantity;
 
         }
