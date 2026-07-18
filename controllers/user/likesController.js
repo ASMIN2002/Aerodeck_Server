@@ -174,12 +174,67 @@ exports.likeProduct = async (req, res) => {
             );
 
         }
+        let totalLikes = 0;
+
+        // GIFT
+        if (String(product_id).startsWith("G")) {
+
+            const [rows] = await pool.query(
+                `SELECT gift_total_likes
+         FROM Gifts_Aerodeck
+         WHERE gift_id = ?`,
+                [product_id]
+            );
+
+            totalLikes = rows[0]?.gift_total_likes || 0;
+        }
+
+        // SHOP
+        else if (String(product_id).startsWith("S")) {
+
+            const [rows] = await pool.query(
+                `SELECT shop_total_likes
+         FROM Shop_Aerodeck
+         WHERE shop_id = ?`,
+                [product_id]
+            );
+
+            totalLikes = rows[0]?.shop_total_likes || 0;
+        }
+
+        // PREMIUM
+        else if (String(product_id).startsWith("P")) {
+
+            const [rows] = await pool.query(
+                `SELECT premium_total_likes
+         FROM Premium_Aerodeck
+         WHERE premium_id = ?`,
+                [product_id]
+            );
+
+            totalLikes = rows[0]?.premium_total_likes || 0;
+        }
+
+        // CARD
+        else {
+
+            const [rows] = await pool.query(
+                `SELECT product_total_likes
+         FROM Products_Aerodeck
+         WHERE product_id = ?`,
+                [product_id]
+            );
+
+            totalLikes = rows[0]?.product_total_likes || 0;
+        }
 
         res.json({
 
             success: true,
 
-            message: "Liked successfully."
+            message: "Liked successfully.",
+
+            totalLikes
 
         });
 
@@ -303,11 +358,67 @@ exports.unlikeProduct = async (req, res) => {
 
         }
 
+        let totalLikes = 0;
+
+        // GIFT
+        if (String(productId).startsWith("G")) {
+
+            const [rows] = await pool.query(
+                `SELECT gift_total_likes
+         FROM Gifts_Aerodeck
+         WHERE gift_id = ?`,
+                [productId]
+            );
+
+            totalLikes = rows[0]?.gift_total_likes || 0;
+        }
+
+        // SHOP
+        else if (String(productId).startsWith("S")) {
+
+            const [rows] = await pool.query(
+                `SELECT shop_total_likes
+         FROM Shop_Aerodeck
+         WHERE shop_id = ?`,
+                [productId]
+            );
+
+            totalLikes = rows[0]?.shop_total_likes || 0;
+        }
+
+        // PREMIUM
+        else if (String(productId).startsWith("P")) {
+
+            const [rows] = await pool.query(
+                `SELECT premium_total_likes
+         FROM Premium_Aerodeck
+         WHERE premium_id = ?`,
+                [productId]
+            );
+
+            totalLikes = rows[0]?.premium_total_likes || 0;
+        }
+
+        // CARD
+        else {
+
+            const [rows] = await pool.query(
+                `SELECT product_total_likes
+         FROM Products_Aerodeck
+         WHERE product_id = ?`,
+                [productId]
+            );
+
+            totalLikes = rows[0]?.product_total_likes || 0;
+        }
+
         res.json({
 
             success: true,
 
-            message: "Unlike successfully."
+            message: "Unlike successfully.",
+
+            totalLikes
 
         });
 
