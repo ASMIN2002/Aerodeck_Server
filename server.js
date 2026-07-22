@@ -21,6 +21,7 @@ const userGiftRoutes = require("./routes/user/userGiftRoutes");
 const userShopRoutes = require("./routes/user/userShopRoutes");
 const userPremiumRoutes = require("./routes/user/userPremiumRoutes");
 const userDetailsRoutes = require("./routes/user/UserDetailsRoutes");
+const userAddressRoutes = require("./routes/user/userAddressRoutes");
 
 
 const app = express();
@@ -45,6 +46,7 @@ app.use("/api/user", userGiftRoutes);
 app.use("/api/user", userShopRoutes);
 app.use("/api/user", userPremiumRoutes);
 app.use("/api/user/details", userDetailsRoutes);
+app.use("/api/user", userAddressRoutes);
 
 
 
