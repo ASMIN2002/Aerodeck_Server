@@ -391,25 +391,6 @@ const getPincodeDetails = async (req, res) => {
 
         const firstOffice = data[0].PostOffice[0];
 
-        const geoResponse = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${firstOffice.District},${firstOffice.State},India&format=jsonv2&limit=1`,
-            {
-                headers: {
-                    "User-Agent": "Aerodeck/1.0"
-                }
-            }
-        );
-
-        const geoData = await geoResponse.json();
-
-        const latitude = geoData.length
-            ? Number(geoData[0].lat)
-            : null;
-
-        const longitude = geoData.length
-            ? Number(geoData[0].lon)
-            : null;
-
         return res.json({
 
             success: true,
@@ -417,22 +398,12 @@ const getPincodeDetails = async (req, res) => {
             location: {
 
                 pincode,
-
                 area: firstOffice.Name,
-
                 post_office: firstOffice.Name,
-
                 district: firstOffice.District,
-
                 city: firstOffice.District,
-
                 state: firstOffice.State,
-
                 country: firstOffice.Country,
-
-                latitude,
-
-                longitude
             },
 
             areas: data[0].PostOffice.map(item => item.Name)
