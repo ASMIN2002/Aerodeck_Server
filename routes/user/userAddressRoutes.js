@@ -5,12 +5,15 @@ const {
     addAddress,
     updateAddress,
     deleteAddress,
-    setPrimaryAddress
+    setPrimaryAddress,
+    getPincodeDetails
 } = require("../../controllers/user/userAddressController");
 
 const router = express.Router();
 
 router.get("/address/:user_id", getAddresses);
+
+router.get("/address/pincode/:pincode", getPincodeDetails);
 
 router.post("/address", addAddress);
 

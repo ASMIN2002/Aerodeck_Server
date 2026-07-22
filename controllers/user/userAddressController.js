@@ -11,7 +11,7 @@ const getAddresses = async (req, res) => {
             `SELECT *
              FROM User_Address_Aerodeck
              WHERE user_id = ?
-             ORDER BY is_primary DESC, address_id ASC`,
+             ORDER BY address_id ASC`,
 
             [user_id]
 
@@ -355,11 +355,108 @@ const setPrimaryAddress = async (req, res) => {
     }
 
 };
+const getPincodeDetails = async (req, res) => {
+
+    try {
+
+        const { pincode } = req.params;
+
+        if (!/^\d{6}$/.test(pincode)) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid PIN Code."
+            });
+
+        }
+
+        const response = await fetch(
+            `https://api.postalpincode.in/pincode/${pincode}`
+        );
+
+        const data = await response.json();
+
+        if (
+            !data ||
+            data[0].Status !== "Success" ||
+            !data[0].PostOffice
+        ) {
+
+            return res.json({
+                success: false,
+                message: "PIN Code not found."
+            });
+
+        }
+
+        const firstOffice = data[0].PostOffice[0];
+
+        const geoResponse = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${firstOffice.District},${firstOffice.State},India&format=jsonv2&limit=1`,
+            {
+                headers: {
+                    "User-Agent": "Aerodeck/1.0"
+                }
+            }
+        );
+
+        const geoData = await geoResponse.json();
+
+        const latitude = geoData.length
+            ? Number(geoData[0].lat)
+            : null;
+
+        const longitude = geoData.length
+            ? Number(geoData[0].lon)
+            : null;
+
+        return res.json({
+
+            success: true,
+
+            location: {
+
+                pincode,
+
+                area: firstOffice.Name,
+
+                post_office: firstOffice.Name,
+
+                district: firstOffice.District,
+
+                city: firstOffice.District,
+
+                state: firstOffice.State,
+
+                country: firstOffice.Country,
+
+                latitude,
+
+                longitude
+            },
+
+            areas: data[0].PostOffice.map(item => item.Name)
+
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Server Error"
+        });
+
+    }
+
+};
 
 module.exports = {
     getAddresses,
     addAddress,
     updateAddress,
     deleteAddress,
-    setPrimaryAddress
+    setPrimaryAddress,
+    getPincodeDetails
 };
