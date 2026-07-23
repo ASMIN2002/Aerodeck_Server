@@ -67,7 +67,7 @@ exports.addToCart = async (req, res) => {
         } = req.body;
 
         let finalQuantity;
-        
+
         const id = String(product_id);
 
         if (id.startsWith("G") || id.startsWith("S")) {
@@ -168,15 +168,12 @@ exports.updateQuantity = async (req, res) => {
         } = req.body;
 
         let finalQuantity;
+        const id = String(product_id);
 
-        if (String(product_id).startsWith("G")) {
-
+        if (id.startsWith("G") || id.startsWith("S")) {
             finalQuantity = quantity < 1 ? 1 : quantity;
-
         } else {
-
             finalQuantity = quantity < 50 ? 50 : quantity;
-
         }
 
         await pool.query(

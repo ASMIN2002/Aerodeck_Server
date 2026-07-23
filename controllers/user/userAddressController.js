@@ -355,6 +355,7 @@ const setPrimaryAddress = async (req, res) => {
     }
 
 };
+
 const getPincodeDetails = async (req, res) => {
 
     try {
