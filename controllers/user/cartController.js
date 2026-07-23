@@ -10,7 +10,7 @@ exports.getCart = async (req, res) => {
 
         const { user_id } = req.query;
 
-        const [rows] = await pool.query(
+        const [cartRows] = await pool.query(
 
             `SELECT *
              FROM User_Cart_Aerodeck
@@ -19,6 +19,112 @@ exports.getCart = async (req, res) => {
             [user_id]
 
         );
+        const productIds = [];
+        const giftIds = [];
+        const premiumIds = [];
+        const shopIds = [];
+
+        for (const row of cartRows) {
+
+            const id = String(row.product_id);
+
+            if (id.startsWith("G")) {
+
+                giftIds.push(id);
+
+            }
+
+            else if (id.startsWith("P")) {
+
+                premiumIds.push(id);
+
+            }
+
+            else if (id.startsWith("S")) {
+
+                shopIds.push(id);
+
+            }
+
+            else {
+
+                productIds.push(Number(id));
+
+            }
+
+        }
+        let products = [];
+
+        if (productIds.length > 0) {
+
+            const [rows] = await pool.query(
+
+                `SELECT *
+         FROM Products_Aerodeck
+         WHERE product_id IN (?)`,
+
+                [productIds]
+
+            );
+
+            products = rows;
+
+        }
+        let gifts = [];
+
+        if (giftIds.length > 0) {
+
+            const [rows] = await pool.query(
+
+                `SELECT *
+         FROM Gifts_Aerodeck
+         WHERE gift_id IN (?)`,
+
+                [giftIds]
+
+            );
+
+            gifts = rows;
+
+        }
+        let premium = [];
+
+        if (premiumIds.length > 0) {
+
+            const [rows] = await pool.query(
+
+                `SELECT *
+         FROM Premium_Aerodeck
+         WHERE premium_id IN (?)`,
+
+                [premiumIds]
+
+            );
+
+            premium = rows;
+
+        }
+        let shops = [];
+
+        if (shopIds.length > 0) {
+
+            const [rows] = await pool.query(
+
+                `SELECT *
+         FROM Shop_Aerodeck
+         WHERE shop_id IN (?)`,
+
+                [shopIds]
+
+            );
+
+            shops = rows;
+
+        }
+        console.log(products);
+        console.log(gifts);
+        console.log(premium);
+        console.log(shops);
 
         res.json({
 
