@@ -3,7 +3,6 @@ const pool = require("../../config/db");
 // ==============================
 // GET CART
 // ==============================
-
 exports.getCart = async (req, res) => {
 
     try {
@@ -14,117 +13,120 @@ exports.getCart = async (req, res) => {
 
             `SELECT *
              FROM User_Cart_Aerodeck
-             WHERE user_id = ?`,
+             WHERE user_id = ?
+             ORDER BY created_at DESC`,
 
             [user_id]
 
         );
-        const productIds = [];
-        const giftIds = [];
-        const premiumIds = [];
-        const shopIds = [];
 
-        for (const row of cartRows) {
+        const finalCart = [];
 
-            const id = String(row.product_id);
+        for (const cart of cartRows) {
+
+            const id = String(cart.product_id);
+
+            let item = null;
 
             if (id.startsWith("G")) {
 
-                giftIds.push(id);
+                const [rows] = await pool.query(
+
+                    `SELECT *
+                     FROM Gifts_Aerodeck
+                     WHERE gift_id = ?`,
+
+                    [id]
+
+                );
+
+                if (rows.length > 0) {
+
+                    item = rows[0];
+
+                }
 
             }
 
             else if (id.startsWith("P")) {
 
-                premiumIds.push(id);
+                const [rows] = await pool.query(
+
+                    `SELECT *
+                     FROM Premium_Aerodeck
+                     WHERE premium_id = ?`,
+
+                    [id]
+
+                );
+
+                if (rows.length > 0) {
+
+                    item = rows[0];
+
+                }
 
             }
 
             else if (id.startsWith("S")) {
 
-                shopIds.push(id);
+                const [rows] = await pool.query(
+
+                    `SELECT *
+                     FROM Shop_Aerodeck
+                     WHERE shop_id = ?`,
+
+                    [id]
+
+                );
+
+                if (rows.length > 0) {
+
+                    item = rows[0];
+
+                }
 
             }
 
             else {
 
-                productIds.push(Number(id));
+                const [rows] = await pool.query(
+
+                    `SELECT *
+                     FROM Products_Aerodeck
+                     WHERE product_id = ?`,
+
+                    [Number(id)]
+
+                );
+
+                if (rows.length > 0) {
+
+                    item = rows[0];
+
+                }
+
+            }
+
+            if (item) {
+
+                finalCart.push({
+
+                    ...item,
+
+                    cart_id: cart.cart_id,
+
+                    quantity: cart.quantity,
+
+                    product_id: cart.product_id,
+
+                    created_at: cart.created_at
+
+                });
 
             }
 
         }
-        let products = [];
-
-        if (productIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-         FROM Products_Aerodeck
-         WHERE product_id IN (?)`,
-
-                [productIds]
-
-            );
-
-            products = rows;
-
-        }
-        let gifts = [];
-
-        if (giftIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-         FROM Gifts_Aerodeck
-         WHERE gift_id IN (?)`,
-
-                [giftIds]
-
-            );
-
-            gifts = rows;
-
-        }
-        let premium = [];
-
-        if (premiumIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-         FROM Premium_Aerodeck
-         WHERE premium_id IN (?)`,
-
-                [premiumIds]
-
-            );
-
-            premium = rows;
-
-        }
-        let shops = [];
-
-        if (shopIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-         FROM Shop_Aerodeck
-         WHERE shop_id IN (?)`,
-
-                [shopIds]
-
-            );
-
-            shops = rows;
-
-        }
-        console.log(products);
-        console.log(gifts);
-        console.log(premium);
-        console.log(shops);
 
         res.json({
 
@@ -132,7 +134,7 @@ exports.getCart = async (req, res) => {
 
             message: "Cart fetched successfully.",
 
-            data: rows
+            data: finalCart
 
         });
 
@@ -153,7 +155,6 @@ exports.getCart = async (req, res) => {
     }
 
 };
-
 // ==============================
 // ADD TO CART
 // ==============================
