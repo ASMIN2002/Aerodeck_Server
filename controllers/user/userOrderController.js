@@ -164,32 +164,47 @@ exports.getOrders = async (req, res) => {
     try {
 
         const { user_id } = req.query;
+
         const [rows] = await pool.query(
 
             `SELECT
 
-        order_id,
-        order_number,
-        total_items,
-        total_amount,
-        order_status,
-        payment_status,
-        payment_method,
-        created_at
+                o.order_id,
+                o.order_number,
+                o.total_items,
+                o.total_amount,
+                o.order_status,
+                o.payment_status,
+                o.payment_method,
+                o.created_at,
+                o.address_id,
 
-    FROM Orders_Aerodeck
+                a.full_name,
+                a.mobile_number,
+                a.house_flat,
+                a.area_street,
+                a.landmark,
+                a.city,
+                a.state,
+                a.pincode,
+                a.address_type
 
-    WHERE user_id = ?
+            FROM Orders_Aerodeck o
 
-    ORDER BY created_at DESC`,
+            LEFT JOIN User_Address_Aerodeck a
+            ON o.address_id = a.address_id
+
+            WHERE o.user_id = ?
+
+            ORDER BY o.created_at DESC`,
 
             [user_id]
 
         );
+
         res.json({
 
             success: true,
-
             data: rows
 
         });
@@ -201,7 +216,6 @@ exports.getOrders = async (req, res) => {
         res.status(500).json({
 
             success: false,
-
             message: "Internal Server Error"
 
         });
@@ -235,11 +249,96 @@ exports.getOrderDetails = async (req, res) => {
 
         );
 
+        const result = [];
+
+        for (const item of rows) {
+
+            let table = "";
+
+            if (item.product_id.startsWith("G")) {
+
+                table = "Gifts_Aerodeck";
+
+            } else if (item.product_id.startsWith("S")) {
+
+                table = "Shop_Aerodeck";
+
+            }
+
+            if (!table) {
+
+                result.push(item);
+                continue;
+
+            }
+
+            let idColumn = "";
+
+            if (item.product_id.startsWith("G")) {
+
+                idColumn = "gift_id";
+
+            } else if (item.product_id.startsWith("S")) {
+
+                idColumn = "shop_id";
+
+            }
+
+            const [product] = await pool.query(
+
+                `SELECT * FROM ${table} WHERE ${idColumn} = ?`,
+
+                [item.product_id]
+
+            );
+            if (item.product_id.startsWith("G")) {
+
+                result.push({
+
+                    ...item,
+
+                    product_name: product[0].gift_name,
+                    product_description: product[0].gift_description,
+                    product_price: product[0].gift_price,
+
+                    product_image1: product[0].gift_image1,
+                    product_image2: product[0].gift_image2,
+                    product_image3: product[0].gift_image3,
+                    product_image4: product[0].gift_image4,
+
+                    product_rating: product[0].gift_rating,
+                    product_status: product[0].gift_status
+
+                });
+
+            } else if (item.product_id.startsWith("S")) {
+
+                result.push({
+
+                    ...item,
+
+                    product_name: product[0].shop_name,
+                    product_description: product[0].shop_description,
+                    product_price: product[0].shop_price,
+
+                    product_image1: product[0].shop_image1,
+                    product_image2: product[0].shop_image2,
+                    product_image3: product[0].shop_image3,
+                    product_image4: product[0].shop_image4,
+
+                    product_rating: product[0].shop_rating,
+                    product_status: product[0].shop_status
+
+                });
+
+            }
+        }
+
         res.json({
 
             success: true,
 
-            data: rows
+            data: result
 
         });
 
