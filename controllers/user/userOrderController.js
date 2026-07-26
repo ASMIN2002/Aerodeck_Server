@@ -69,6 +69,29 @@ exports.placeOrder = async (req, res) => {
 
         const order_id = orderResult.insertId;
 
+        await pool.query(
+
+            `INSERT INTO Payment_Aerodeck
+    (
+        order_id,
+        user_id,
+        payment_method,
+        payment_status,
+        amount
+    )
+    VALUES
+    (?,?,?,?,?)`,
+
+            [
+                order_id,
+                user_id,
+                payment_method,
+                payment_method === "COD" ? "PENDING" : "PAID",
+                total_amount
+            ]
+
+        );
+
         for (const item of items) {
 
             let productType = "";
