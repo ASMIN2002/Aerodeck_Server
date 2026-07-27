@@ -47,8 +47,18 @@ const sessionStore = new MySQLStore(
 const app = express();
 app.use(helmet());
 app.use(cookieParser());
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://aerodeckuniqueusers.netlify.app"
+];
+
 app.use(cors({
-    origin: process.env.CLIENT_URL,
+    origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true
 }));
 app.use(express.json());
