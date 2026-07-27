@@ -503,6 +503,44 @@ exports.verifyLoginOtp = async (req, res) => {
             });
 
         }
+        await new Promise((resolve, reject) => {
+
+            req.session.regenerate((err) => {
+
+                if (err) return reject(err);
+
+                req.session.user = {
+
+                    user_id: user.user_id,
+
+                    full_name: user.full_name,
+
+                    mobile_number: user.mobile_number,
+
+                    email: user.email,
+
+                    is_mobile_verified: user.is_mobile_verified,
+
+                    is_email_verified: user.is_email_verified
+
+                };
+
+                resolve();
+
+            });
+
+        });
+        await new Promise((resolve, reject) => {
+
+            req.session.save((err) => {
+
+                if (err) return reject(err);
+
+                resolve();
+
+            });
+
+        });
 
         const token = jwt.sign(
             {
@@ -556,5 +594,76 @@ exports.verifyLoginOtp = async (req, res) => {
         });
 
     }
+
+};
+exports.checkSession = async (req, res) => {
+
+    try {
+
+        if (!req.session || !req.session.user) {
+
+            return res.json({
+
+                success: false,
+
+                authenticated: false
+
+            });
+
+        }
+
+        return res.json({
+
+            success: true,
+
+            authenticated: true,
+
+            user: req.session.user
+
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+};
+
+exports.logout = (req, res) => {
+
+    req.session.destroy((err) => {
+
+        if (err) {
+
+            return res.status(500).json({
+
+                success: false,
+
+                message: "Logout failed."
+
+            });
+
+        }
+
+        res.clearCookie("aerodeck.sid");
+
+        return res.json({
+
+            success: true,
+
+            message: "Logout successful."
+
+        });
+
+    });
 
 };

@@ -6,7 +6,9 @@ const {
     register,
     verifyRegisterOtp,
     login,
-    verifyLoginOtp
+    verifyLoginOtp,
+    checkSession,
+    logout
 } = require("../controllers/authController");
 
 router.post(
@@ -27,6 +29,16 @@ router.post(
 router.post(
     "/verify-login-otp",
     verifyLoginOtp
+);
+
+router.get(
+    "/session",
+    checkSession
+);
+
+router.post(
+    "/logout",
+    logout
 );
 
 module.exports = router;

@@ -11,6 +11,13 @@ const giftRoutes = require("./routes/giftRoutes");
 const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
 
+// SECURITY
+const session = require("express-session");
+const MySQLStore = require("express-mysql-session")(session);
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
 
 // USER
 const userProductRoutes = require("./routes/user/userProducts");
@@ -27,9 +34,48 @@ const UserPaymentRoute = require("./routes/user/UserPaymentRoute");
 const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
 
 
+const sessionStore = new MySQLStore(
+    {
+        createDatabaseTable: true,
+        schema: {
+            tableName: "User_Sessions_AERODECK"
+        }
+    },
+    pool
+);
+
 const app = express();
-app.use(cors());
+app.use(helmet());
+app.use(cookieParser());
+app.use(cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true
+}));
 app.use(express.json());
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+// app.use(limiter);
+app.use(session({
+    name: "aerodeck.sid",
+    secret: process.env.SESSION_SECRET,
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite:
+            process.env.NODE_ENV === "production"
+                ? "none"
+                : "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000
+    }
+}));
 app.use("/api/upload", uploadRoutes);
 app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
