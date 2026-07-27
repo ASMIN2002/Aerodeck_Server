@@ -82,6 +82,11 @@ exports.verifyPayment = async (req, res) => {
             gst,
             platform_fee,
             delivery_fee,
+
+            full_amount,
+            advance_amount,
+            remaining_amount,
+
             total_amount
 
         } = req.body;
@@ -140,13 +145,15 @@ exports.verifyPayment = async (req, res) => {
                 platform_fee,
                 delivery_fee,
                 total_amount,
+                advance_amount,
+                remaining_amount,
                 payment_method,
                 payment_status,
                 order_status,
                 address_id
             )
             VALUES
-            (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
             [
 
@@ -159,12 +166,26 @@ exports.verifyPayment = async (req, res) => {
                 gst,
                 platform_fee,
                 delivery_fee,
-                total_amount,
-                payment_method,
-                "PAID",
-                "PLACED",
-                address_id
 
+                full_amount,
+
+                order_type === "CARD"
+                    ? advance_amount
+                    : full_amount,
+
+                order_type === "CARD"
+                    ? remaining_amount
+                    : 0,
+
+                payment_method,
+
+                order_type === "CARD"
+                    ? "PARTIAL"
+                    : "PAID",
+
+                "PLACED",
+
+                address_id
             ]
 
         );
@@ -197,7 +218,7 @@ exports.verifyPayment = async (req, res) => {
                 razorpay_payment_id,
                 razorpay_signature,
                 payment_method,
-                "PAID",
+                order_type === "CARD" ? "PARTIAL" : "PAID",
                 total_amount
 
             ]
@@ -275,21 +296,64 @@ exports.verifyPayment = async (req, res) => {
                 ]
             );
 
+            const invoice_number =
+                `AJDD${new Date().getFullYear()}${String(order_id).padStart(6, "0")}-${item.product_id}`;
+
+            const gstPercentage = 18;
+            const gstAmount = (price * item.quantity * gstPercentage) / 100;
+            const totalAmount = (price * item.quantity) + gstAmount;
+
+            await connection.query(
+                `INSERT INTO Invoice_Aerodeck
+    (
+        invoice_number,
+        order_id,
+        order_number,
+        user_id,
+        product_id,
+        product_name,
+        quantity,
+        unit_price,
+        gst_percentage,
+        gst_amount,
+        total_amount,
+        gstin_number
+    )
+    VALUES
+    (?,?,?,?,?,?,?,?,?,?,?,?)`,
+                [
+                    invoice_number,
+                    order_id,
+                    order_number,
+                    user_id,
+                    item.product_id,
+                    name,
+                    item.quantity,
+                    price,
+                    gstPercentage,
+                    gstAmount,
+                    totalAmount,
+                    "21ABCDE1234F1Z5"
+                ]
+            );
 
 
         }
 
         // Clear Cart
 
-        await connection.query(
+        for (const item of items) {
 
-            `DELETE FROM User_Cart_Aerodeck
-            WHERE user_id=?`,
-
-            [user_id]
-
-        );
-
+            await connection.query(
+                `DELETE FROM User_Cart_Aerodeck
+         WHERE user_id = ?
+         AND product_id = ?`,
+                [
+                    user_id,
+                    item.product_id
+                ]
+            );
+        }
         await connection.commit();
 
         return res.json({

@@ -24,6 +24,7 @@ const userDetailsRoutes = require("./routes/user/UserDetailsRoutes");
 const userAddressRoutes = require("./routes/user/userAddressRoutes");
 const userOrderRoutes = require("./routes/user/userOrderRoutes");
 const UserPaymentRoute = require("./routes/user/UserPaymentRoute");
+const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
 
 
 const app = express();
@@ -51,6 +52,7 @@ app.use("/api/user/details", userDetailsRoutes);
 app.use("/api/user", userAddressRoutes);
 app.use("/api/user/orders", userOrderRoutes);
 app.use("/api/user/payment", UserPaymentRoute);
+app.use("/api/user/invoice", userInvoiceRoutes);
 
 
 
