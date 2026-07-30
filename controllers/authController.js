@@ -100,7 +100,7 @@ exports.register = async (req, res) => {
             `INSERT INTO User_OTP_Aerodeck
     (
         user_id,
-        mobile_otp
+        login_otp
     )
     VALUES
     (
@@ -194,10 +194,9 @@ exports.verifyRegisterOtp = async (req, res) => {
         const [otpRows] = await pool.query(
 
             `SELECT
-                otp_id,
-                mobile_otp
-             FROM User_OTP_Aerodeck
-             WHERE user_id = ?`,
+    login_otp
+FROM User_OTP_Aerodeck
+WHERE user_id = ?`,
 
             [user.user_id]
 
@@ -215,7 +214,7 @@ exports.verifyRegisterOtp = async (req, res) => {
 
         }
 
-        if (otpRows[0].mobile_otp !== otp) {
+        if (otpRows[0].login_otp !== otp) {
 
             return res.json({
 
@@ -237,22 +236,76 @@ exports.verifyRegisterOtp = async (req, res) => {
 
         );
 
+        const sessionToken = crypto.randomBytes(32).toString("hex");
+
+        await pool.query(
+            `UPDATE User_Session_Aerodeck
+     SET is_active = 0
+     WHERE user_id = ?`,
+            [user.user_id]
+        );
+
+        const [sessionRows] = await pool.query(
+            `SELECT session_id
+     FROM User_Session_Aerodeck
+     WHERE user_id = ?
+     LIMIT 1`,
+            [user.user_id]
+        );
+
+        if (sessionRows.length > 0) {
+
+            await pool.query(
+                `UPDATE User_Session_Aerodeck
+         SET
+             session_token = ?,
+             login_at = CURRENT_TIMESTAMP,
+             last_active_at = CURRENT_TIMESTAMP,
+             is_active = 1
+         WHERE user_id = ?`,
+                [
+                    sessionToken,
+                    user.user_id
+                ]
+            );
+
+        } else {
+
+            await pool.query(
+                `INSERT INTO User_Session_Aerodeck
+        (
+            user_id,
+            session_token,
+            is_active
+        )
+        VALUES
+        (
+            ?,
+            ?,
+            1
+        )`,
+                [
+                    user.user_id,
+                    sessionToken
+                ]
+            );
+
+        }
 
         return res.json({
 
             success: true,
 
+            session_token: sessionToken,
+
             user: {
 
                 user_id: user.user_id,
-
                 full_name: user.full_name,
-
                 mobile_number: user.mobile_number,
-
                 email: user.email,
-
-                is_mobile_verified: 1
+                is_mobile_verified: 1,
+                is_email_verified: user.is_email_verified
 
             }
 
@@ -337,58 +390,18 @@ exports.login = async (req, res) => {
         const otp = Math.floor(
             100000 + Math.random() * 900000
         ).toString();
+        await pool.query(
 
-        const [otpRows] = await pool.query(
+            `UPDATE User_OTP_Aerodeck
+     SET login_otp = ?
+     WHERE user_id = ?`,
 
-            `SELECT otp_id
-             FROM User_OTP_Aerodeck
-             WHERE user_id = ?`,
-
-            [user.user_id]
+            [
+                otp,
+                user.user_id
+            ]
 
         );
-
-        if (otpRows.length > 0) {
-
-            await pool.query(
-
-                `UPDATE User_OTP_Aerodeck
-                 SET
-                    mobile_otp = ?,
-                    created_at = CURRENT_TIMESTAMP
-                 WHERE user_id = ?`,
-
-                [
-                    otp,
-                    user.user_id
-                ]
-
-            );
-
-        } else {
-
-            await pool.query(
-
-                `INSERT INTO User_OTP_Aerodeck
-                (
-                    user_id,
-                    mobile_otp
-                )
-                VALUES
-                (
-                    ?,
-                    ?
-                )`,
-
-                [
-                    user.user_id,
-                    otp
-                ]
-
-            );
-
-        }
-
         console.log("LOGIN OTP :", otp);
 
         return res.json({
@@ -470,10 +483,9 @@ exports.verifyLoginOtp = async (req, res) => {
         const [otpRows] = await pool.query(
 
             `SELECT
-                otp_id,
-                mobile_otp
-             FROM User_OTP_Aerodeck
-             WHERE user_id = ?`,
+    login_otp
+FROM User_OTP_Aerodeck
+WHERE user_id = ?`,
 
             [user.user_id]
 
@@ -492,7 +504,7 @@ exports.verifyLoginOtp = async (req, res) => {
         }
         const sessionToken = crypto.randomBytes(32).toString("hex");
 
-        if (otpRows[0].mobile_otp !== otp) {
+        if (otpRows[0].login_otp !== otp) {
 
 
 
@@ -558,7 +570,6 @@ exports.verifyLoginOtp = async (req, res) => {
             );
 
         }
-
         return res.json({
 
             success: true,
