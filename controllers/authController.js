@@ -1,6 +1,5 @@
 const pool = require("../config/db");
-const jwt = require("jsonwebtoken");
-
+const crypto = require("crypto");
 
 exports.register = async (req, res) => {
     try {
@@ -491,8 +490,11 @@ exports.verifyLoginOtp = async (req, res) => {
             });
 
         }
+        const sessionToken = crypto.randomBytes(32).toString("hex");
 
         if (otpRows[0].mobile_otp !== otp) {
+
+
 
             return res.json({
 
@@ -503,64 +505,64 @@ exports.verifyLoginOtp = async (req, res) => {
             });
 
         }
-        await new Promise((resolve, reject) => {
-
-            req.session.regenerate((err) => {
-
-                if (err) return reject(err);
-
-                req.session.user = {
-
-                    user_id: user.user_id,
-
-                    full_name: user.full_name,
-
-                    mobile_number: user.mobile_number,
-
-                    email: user.email,
-
-                    is_mobile_verified: user.is_mobile_verified,
-
-                    is_email_verified: user.is_email_verified
-
-                };
-
-                resolve();
-
-            });
-
-        });
-        await new Promise((resolve, reject) => {
-
-            req.session.save((err) => {
-
-                if (err) return reject(err);
-
-                resolve();
-
-            });
-
-        });
-
-        const token = jwt.sign(
-            {
-                user_id: user.user_id
-            },
-            process.env.JWT_SECRET,
-            {
-
-                expiresIn: "30d"
-
-            }
-
+        await pool.query(
+            `UPDATE User_Session_Aerodeck
+     SET is_active = 0
+     WHERE user_id = ?`,
+            [user.user_id]
         );
+
+        const [sessionRows] = await pool.query(
+            `SELECT session_id
+     FROM User_Session_Aerodeck
+     WHERE user_id = ?
+     LIMIT 1`,
+            [user.user_id]
+        );
+
+        if (sessionRows.length > 0) {
+
+            await pool.query(
+                `UPDATE User_Session_Aerodeck
+         SET
+             session_token = ?,
+             login_at = CURRENT_TIMESTAMP,
+             last_active_at = CURRENT_TIMESTAMP,
+             is_active = 1
+         WHERE user_id = ?`,
+                [
+                    sessionToken,
+                    user.user_id
+                ]
+            );
+
+        } else {
+
+            await pool.query(
+                `INSERT INTO User_Session_Aerodeck
+        (
+            user_id,
+            session_token,
+            is_active
+        )
+        VALUES
+        (
+            ?,
+            ?,
+            1
+        )`,
+                [
+                    user.user_id,
+                    sessionToken
+                ]
+            );
+
+        }
 
         return res.json({
 
             success: true,
-
-            token,
-
+            session_token: sessionToken,
             user: {
 
                 user_id: user.user_id,
@@ -600,15 +602,95 @@ exports.checkSession = async (req, res) => {
 
     try {
 
-        if (!req.session || !req.session.user) {
+        const sessionToken = req.body?.session_token;
+
+        if (!sessionToken) {
+
+            return res.json({
+                success: false,
+                authenticated: false
+            });
+
+        }
+
+        const [sessionRows] = await pool.query(
+            `SELECT user_id
+             FROM User_Session_Aerodeck
+             WHERE session_token = ?
+             AND is_active = 1
+             LIMIT 1`,
+            [sessionToken]
+        );
+
+        if (sessionRows.length === 0) {
+
+            return res.json({
+                success: false,
+                authenticated: false
+            });
+
+        }
+
+        const [userRows] = await pool.query(
+            `SELECT *
+             FROM User_Aerodeck
+             WHERE user_id = ?
+             LIMIT 1`,
+            [sessionRows[0].user_id]
+        );
+
+        if (userRows.length === 0) {
+
+            return res.json({
+                success: false,
+                authenticated: false
+            });
+
+        }
+
+        return res.json({
+            success: true,
+            authenticated: true,
+            user: userRows[0]
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
+exports.logout = async (req, res) => {
+
+    try {
+
+        const { session_token } = req.body;
+
+        if (!session_token) {
 
             return res.json({
 
                 success: false,
 
-                authenticated: false
+                message: "Session token is required."
 
             });
+
+        }
+        if (session_token) {
+
+            await pool.query(
+                `UPDATE User_Session_Aerodeck
+     SET is_active = 0
+     WHERE session_token = ?`,
+                [session_token]
+            );
 
         }
 
@@ -616,9 +698,7 @@ exports.checkSession = async (req, res) => {
 
             success: true,
 
-            authenticated: true,
-
-            user: req.session.user
+            message: "Logout successful."
 
         });
 
@@ -635,35 +715,5 @@ exports.checkSession = async (req, res) => {
         });
 
     }
-
-};
-
-exports.logout = (req, res) => {
-
-    req.session.destroy((err) => {
-
-        if (err) {
-
-            return res.status(500).json({
-
-                success: false,
-
-                message: "Logout failed."
-
-            });
-
-        }
-
-        res.clearCookie("aerodeck.sid");
-
-        return res.json({
-
-            success: true,
-
-            message: "Logout successful."
-
-        });
-
-    });
 
 };

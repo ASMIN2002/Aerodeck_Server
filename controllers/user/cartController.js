@@ -1,4 +1,5 @@
 const pool = require("../../config/db");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 // ==============================
 // GET CART
@@ -7,7 +8,21 @@ exports.getCart = async (req, res) => {
 
     try {
 
-        const { user_id } = req.query;
+        const { session_token } = req.query;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [cartRows] = await pool.query(
 
@@ -162,10 +177,9 @@ exports.getCart = async (req, res) => {
 exports.addToCart = async (req, res) => {
 
     try {
-
         const {
 
-            user_id,
+            session_token,
 
             product_id,
 
@@ -173,6 +187,19 @@ exports.addToCart = async (req, res) => {
 
         } = req.body;
 
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
         let finalQuantity;
 
         const id = String(product_id);
@@ -266,13 +293,27 @@ exports.updateQuantity = async (req, res) => {
 
         const {
 
-            user_id,
+            session_token,
 
             product_id,
 
             quantity
 
         } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         let finalQuantity;
         const id = String(product_id);
@@ -336,7 +377,21 @@ exports.removeFromCart = async (req, res) => {
 
     try {
 
-        const { user_id } = req.body;
+        const { session_token } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const { productId } = req.params;
 

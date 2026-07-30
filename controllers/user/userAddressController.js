@@ -1,10 +1,25 @@
 const db = require("../../config/db");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 const getAddresses = async (req, res) => {
 
     try {
 
-        const { user_id } = req.params;
+        const { session_token } = req.query;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [rows] = await db.query(
 
@@ -40,7 +55,7 @@ const addAddress = async (req, res) => {
     try {
 
         const {
-            user_id,
+            session_token,
             full_name,
             mobile_number,
             house_flat,
@@ -53,6 +68,20 @@ const addAddress = async (req, res) => {
             longitude,
             address_type
         } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         // Maximum 4 addresses check
         const [count] = await db.query(
@@ -140,7 +169,7 @@ const updateAddress = async (req, res) => {
         const { address_id } = req.params;
 
         const {
-            user_id,
+            session_token,
             full_name,
             mobile_number,
             house_flat,
@@ -153,6 +182,20 @@ const updateAddress = async (req, res) => {
             longitude,
             address_type
         } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [result] = await db.query(
 
@@ -222,7 +265,21 @@ const deleteAddress = async (req, res) => {
     try {
 
         const { address_id } = req.params;
-        const { user_id } = req.body;
+        const { session_token } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         // Check address
         const [rows] = await db.query(
@@ -313,7 +370,21 @@ const setPrimaryAddress = async (req, res) => {
     try {
 
         const { address_id } = req.params;
-        const { user_id } = req.body;
+        const { session_token } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         // Sab addresses ko non-primary banao
         await db.query(

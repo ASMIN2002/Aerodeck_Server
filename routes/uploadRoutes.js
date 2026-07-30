@@ -9,6 +9,10 @@ const {
 
     uploadProfile,
 
+    uploadUserProfile,
+
+    removeUserProfile,
+
     uploadProduct,
 
     uploadGift,
@@ -68,6 +72,22 @@ router.post(
 
     uploadProfile
 
+);
+
+router.post(
+
+    "/user-profile",
+
+    upload.single("image"),
+
+    uploadUserProfile
+);
+
+router.post(
+
+    "/remove-user-profile",
+
+    removeUserProfile
 );
 
 module.exports = router;

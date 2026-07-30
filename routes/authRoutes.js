@@ -31,8 +31,8 @@ router.post(
     verifyLoginOtp
 );
 
-router.get(
-    "/session",
+router.post(
+    "/check-session",
     checkSession
 );
 

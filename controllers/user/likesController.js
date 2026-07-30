@@ -1,4 +1,5 @@
 const pool = require("../../config/db");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 // ==============================
 // GET USER LIKES
@@ -8,7 +9,21 @@ exports.getLikes = async (req, res) => {
 
     try {
 
-        const { user_id } = req.query;
+        const { session_token } = req.query;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [rows] = await pool.query(
 
@@ -58,11 +73,24 @@ exports.likeProduct = async (req, res) => {
 
         const {
 
-            user_id,
+            session_token,
             product_id
 
         } = req.body;
 
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
         const [exists] = await pool.query(
 
             `SELECT *
@@ -264,7 +292,21 @@ exports.unlikeProduct = async (req, res) => {
 
     try {
 
-        const { user_id } = req.body;
+        const { session_token } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const { productId } = req.params;
 

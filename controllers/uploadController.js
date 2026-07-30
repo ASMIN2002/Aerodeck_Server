@@ -1,4 +1,5 @@
 const cloudinary = require("../config/cloudinary");
+const getUserIdFromSession = require("../middleware/getUserIdFromSession");
 
 const db = require("../config/db");
 
@@ -671,6 +672,240 @@ exports.uploadShop = async (req, res) => {
 
       message: err.message
 
+    });
+
+  }
+
+};
+
+
+// USER
+exports.uploadUserProfile = async (req, res) => {
+
+  try {
+
+    const { session_token } = req.body;
+
+    const user_id = await getUserIdFromSession(session_token);
+
+    if (!user_id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid session."
+      });
+    }
+
+    if (!user_id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required."
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image selected."
+      });
+    }
+
+    // Get current profile image
+    const [rows] = await db.query(
+
+      `SELECT
+                profile_image,
+                profile_image_id
+             FROM User_Aerodeck
+             WHERE user_id=?`,
+
+      [user_id]
+
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found."
+      });
+    }
+
+    // Delete old image
+    if (rows[0].profile_image_id) {
+
+      try {
+
+        await cloudinary.uploader.destroy(
+          rows[0].profile_image_id
+        );
+
+        console.log(
+          "OLD USER IMAGE DELETED:",
+          rows[0].profile_image_id
+        );
+
+      } catch (e) {
+
+        console.log("Old image delete skipped.");
+
+      }
+
+    }
+
+    // Upload new image
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+
+        {
+          folder: "AERODECK/USERS",
+          public_id: `user_${user_id}_profile`,
+          overwrite: true,
+          invalidate: true,
+          resource_type: "image"
+        },
+
+        (err, result) => {
+
+          if (err) return reject(err);
+
+          resolve(result);
+
+        }
+
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    // Update Database
+    const [updateResult] = await db.query(
+
+      `UPDATE User_Aerodeck
+             SET
+                profile_image=?,
+                profile_image_id=?
+             WHERE user_id=?`,
+
+      [
+        result.secure_url,
+        result.public_id,
+        user_id
+      ]
+
+    );
+    // Return updated user
+    const [updated] = await db.query(
+
+      `SELECT
+                user_id,
+                full_name,
+                mobile_number,
+                email,
+                profile_image,
+                profile_image_id,
+                calling_number,
+                whatsapp_number,
+                is_mobile_verified,
+                is_email_verified
+             FROM User_Aerodeck
+             WHERE user_id=?`,
+
+      [user_id]
+
+    );
+
+    return res.json({
+
+      success: true,
+
+      message: "Profile image updated successfully.",
+
+      user: updated[0]
+
+    });
+
+  }
+
+  catch (err) {
+
+    console.error(err);
+
+    return res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};
+exports.removeUserProfile = async (req, res) => {
+
+  try {
+
+    const { session_token } = req.body;
+
+    const user_id = await getUserIdFromSession(session_token);
+
+    if (!user_id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid session."
+      });
+    }
+    const [rows] = await db.query(
+      `SELECT profile_image_id
+             FROM User_Aerodeck
+             WHERE user_id=?`,
+      [user_id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found."
+      });
+    }
+
+    if (rows[0].profile_image_id) {
+
+      await cloudinary.uploader.destroy(
+        rows[0].profile_image_id
+      );
+
+    }
+
+    await db.query(
+      `UPDATE User_Aerodeck
+             SET
+                profile_image=NULL,
+                profile_image_id=NULL
+             WHERE user_id=?`,
+      [user_id]
+    );
+
+    const [updated] = await db.query(
+      `SELECT *
+             FROM User_Aerodeck
+             WHERE user_id=?`,
+      [user_id]
+    );
+
+    return res.json({
+      success: true,
+      user: updated[0]
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message
     });
 
   }

@@ -1,4 +1,5 @@
 const pool = require("../../config/db");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 exports.placeOrder = async (req, res) => {
 
@@ -7,7 +8,7 @@ exports.placeOrder = async (req, res) => {
 
         const {
 
-            user_id,
+            session_token,
             address_id,
             payment_method,
             order_type,
@@ -21,6 +22,19 @@ exports.placeOrder = async (req, res) => {
 
         } = req.body;
 
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
         const orderNumber = "AD" + Date.now();
 
         const [orderResult] = await pool.query(
@@ -238,7 +252,21 @@ exports.getOrders = async (req, res) => {
 
     try {
 
-        const { user_id } = req.query;
+        const { session_token } = req.query;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [rows] = await pool.query(
 

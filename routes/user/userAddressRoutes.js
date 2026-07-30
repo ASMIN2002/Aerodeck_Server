@@ -11,7 +11,7 @@ const {
 
 const router = express.Router();
 
-router.get("/address/:user_id", getAddresses);
+router.get("/address", getAddresses);
 
 router.get("/address/pincode/:pincode", getPincodeDetails);
 

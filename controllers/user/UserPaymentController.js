@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 const pool = require("../../config/db");
 
 const razorpay = new Razorpay({
@@ -68,7 +69,7 @@ exports.verifyPayment = async (req, res) => {
             razorpay_payment_id,
             razorpay_signature,
 
-            user_id,
+            session_token,
             address_id,
 
             payment_method,
@@ -91,6 +92,19 @@ exports.verifyPayment = async (req, res) => {
 
         } = req.body;
 
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
         // Verify Signature
 
         const expectedSignature = crypto

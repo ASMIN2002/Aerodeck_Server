@@ -1,4 +1,5 @@
 const pool = require("../../config/db");
+const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 // ==============================
 // GET USER WISHLIST
@@ -8,7 +9,21 @@ exports.getWishlist = async (req, res) => {
 
     try {
 
-        const { user_id } = req.query;
+        const { session_token } = req.query;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [wishlistRows] = await pool.query(
 
@@ -257,7 +272,21 @@ exports.saveProduct = async (req, res) => {
 
     try {
 
-        const { user_id, product_id } = req.body;
+        const { session_token, product_id } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const [exists] = await pool.query(
 
@@ -381,7 +410,21 @@ exports.removeProduct = async (req, res) => {
 
     try {
 
-        const { user_id } = req.body;
+        const { session_token } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+
+                success: false,
+
+                message: "Invalid or expired session."
+
+            });
+
+        }
 
         const { productId } = req.params;
 
