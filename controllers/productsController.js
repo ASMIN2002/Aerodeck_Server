@@ -40,7 +40,7 @@ const addProduct = async (req, res) => {
 
         } = req.body;
 
-        await db.query(
+        const [result] = await db.query(
 
             `INSERT INTO Products_Aerodeck (
 
@@ -81,7 +81,30 @@ const addProduct = async (req, res) => {
             ]
 
         );
-
+        await db.query(
+            `INSERT INTO User_Product_Detail
+    (
+        product_id,
+        category,
+        material,
+        size,
+        printing,
+        delivery,
+        return_days,
+        video_link
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                result.insertId,
+                product_category,
+                req.body.material,
+                req.body.size,
+                req.body.printing,
+                req.body.delivery,
+                req.body.return_days,
+                req.body.video_link
+            ]
+        );
         return res.json({
 
             success: true,

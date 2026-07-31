@@ -45,6 +45,17 @@ const getDetails = async (req, res) => {
             [id]
 
         );
+        let productDetail = null;
+
+        if (type.toLowerCase() === "card") {
+
+            const [detailRows] = await db.query(
+                `SELECT * FROM User_Product_Detail WHERE product_id = ? LIMIT 1`,
+                [id]
+            );
+
+            productDetail = detailRows.length ? detailRows[0] : null;
+        }
 
         if (rows.length === 0) {
 
@@ -57,7 +68,10 @@ const getDetails = async (req, res) => {
 
         res.json({
             success: true,
-            data: rows[0]
+            data: {
+                ...rows[0],
+                productDetail
+            }
         });
 
     } catch (error) {
