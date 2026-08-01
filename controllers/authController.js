@@ -453,14 +453,16 @@ exports.verifyLoginOtp = async (req, res) => {
         const [users] = await pool.query(
 
             `SELECT
-                user_id,
-                full_name,
-                mobile_number,
-                email,
-                is_mobile_verified,
-                is_email_verified
-             FROM User_Aerodeck
-             WHERE mobile_number = ?`,
+    user_id,
+    full_name,
+    mobile_number,
+    email,
+    profile_image,
+    profile_image_id,
+    is_mobile_verified,
+    is_email_verified
+FROM User_Aerodeck
+WHERE mobile_number = ?`,
 
             [mobile_number]
 
@@ -576,17 +578,25 @@ WHERE user_id = ?`,
             session_token: sessionToken,
             user: {
 
-                user_id: user.user_id,
+                user: {
 
-                full_name: user.full_name,
+                    user_id: user.user_id,
 
-                mobile_number: user.mobile_number,
+                    full_name: user.full_name,
 
-                email: user.email,
+                    mobile_number: user.mobile_number,
 
-                is_mobile_verified: user.is_mobile_verified,
+                    email: user.email,
 
-                is_email_verified: user.is_email_verified
+                    profile_image: user.profile_image,
+
+                    profile_image_id: user.profile_image_id,
+
+                    is_mobile_verified: user.is_mobile_verified,
+
+                    is_email_verified: user.is_email_verified
+
+                }
 
             }
 

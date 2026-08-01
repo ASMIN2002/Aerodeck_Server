@@ -2,8 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    getProducts
+    getProducts,
+    getRelatedProducts
 } = require("../../controllers/user/userProductsController");
+
 const {
     getOffers
 } = require("../../controllers/user/offerController");
@@ -12,5 +14,7 @@ const {
 router.get("/products", getProducts);
 
 router.get("/offers", getOffers);
+
+router.get("/products/related", getRelatedProducts);
 
 module.exports = router;

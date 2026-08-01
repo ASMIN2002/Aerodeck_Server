@@ -58,6 +58,7 @@ exports.getPaymentConfig = (req, res) => {
 
 };
 exports.verifyPayment = async (req, res) => {
+    console.log(req.body);
 
     let connection;
 
@@ -84,13 +85,13 @@ exports.verifyPayment = async (req, res) => {
             platform_fee,
             delivery_fee,
 
-            full_amount,
+            total_amount,
             advance_amount,
-            remaining_amount,
-
-            total_amount
+            remaining_amount
 
         } = req.body;
+
+        // Decide Order Type
 
         const user_id = await getUserIdFromSession(session_token);
 
@@ -180,12 +181,10 @@ exports.verifyPayment = async (req, res) => {
                 gst,
                 platform_fee,
                 delivery_fee,
-
-                full_amount,
-
+                total_amount,
                 order_type === "CARD"
                     ? advance_amount
-                    : full_amount,
+                    : 0,
 
                 order_type === "CARD"
                     ? remaining_amount
@@ -196,7 +195,6 @@ exports.verifyPayment = async (req, res) => {
                 order_type === "CARD"
                     ? "PARTIAL"
                     : "PAID",
-
                 "PLACED",
 
                 address_id

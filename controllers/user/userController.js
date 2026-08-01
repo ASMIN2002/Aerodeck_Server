@@ -1,6 +1,56 @@
 const db = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
+exports.getProfile = async (req, res) => {
+
+    try {
+
+        const { session_token } = req.body;
+
+        if (!session_token) {
+            return res.status(401).json({
+                success: false,
+                message: "Session token is required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        const [rows] = await db.query(
+            `
+            SELECT *
+            FROM User_Aerodeck
+            WHERE user_id = ?
+            LIMIT 1
+            `,
+            [user_id]
+        );
+
+        return res.json({
+            success: true,
+            user: rows[0]
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
+
 // ===============================
 // UPDATE USER NAME
 // ===============================

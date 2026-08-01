@@ -64,7 +64,7 @@ exports.placeOrder = async (req, res) => {
 
                 orderNumber,
                 user_id,
-                order_type === "PRODUCTS" ? "PRODUCT" : "CARD",
+                order_type === "PRODUCT" ? "PRODUCT" : "CARD",
                 total_items,
                 subtotal,
                 0,
@@ -140,14 +140,14 @@ exports.placeOrder = async (req, res) => {
             product_image,
             unit_price,
             quantity,
-            total_price
+            total_price,
+            order_status
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
                 [
-
                     order_id,
                     item.product_id,
                     productType,
@@ -155,8 +155,8 @@ exports.placeOrder = async (req, res) => {
                     productImage,
                     unitPrice,
                     item.quantity,
-                    unitPrice * item.quantity
-
+                    unitPrice * item.quantity,
+                    "PLACED"
                 ]
 
             );
@@ -335,18 +335,21 @@ exports.getOrderDetails = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT
+    oi.product_id,
+    oi.product_name,
+    oi.product_image,
+    oi.quantity,
+    oi.unit_price,
+    oi.total_price,
+    oi.product_type,
+    oi.order_status
 
-                product_id,
-                product_name,
-                product_image,
-                quantity,
-                unit_price,
-                total_price,
-                product_type
+FROM Order_Items_Aerodeck oi
 
-            FROM Order_Items_Aerodeck
+INNER JOIN Orders_Aerodeck o
+ON oi.order_id = o.order_id
 
-            WHERE order_id = ?`,
+WHERE oi.order_id = ?`,
 
             [order_id]
 
@@ -455,6 +458,71 @@ exports.getOrderDetails = async (req, res) => {
 
             message: "Internal Server Error"
 
+        });
+
+    }
+
+};
+exports.updateOrderItemStatus = async (req, res) => {
+
+    try {
+
+        const { order_id, product_id, order_status } = req.body;
+
+        // Item status update
+
+        await pool.query(
+            `UPDATE Order_Items_Aerodeck
+             SET order_status = ?
+             WHERE order_id = ?
+             AND product_id = ?`,
+            [order_status, order_id, product_id]
+        );
+
+        // Check remaining items
+
+        const [rows] = await pool.query(
+            `SELECT COUNT(*) AS pending
+             FROM Order_Items_Aerodeck
+             WHERE order_id = ?
+             AND order_status != 'DELIVERED'`,
+            [order_id]
+        );
+
+        // If all delivered -> complete order
+
+        if (rows[0].pending === 0) {
+
+            await pool.query(
+                `UPDATE Orders_Aerodeck
+         SET order_status = 'COMPLETE'
+         WHERE order_id = ?`,
+                [order_id]
+            );
+
+        } else {
+
+            await pool.query(
+                `UPDATE Orders_Aerodeck
+         SET order_status = 'PLACED'
+         WHERE order_id = ?`,
+                [order_id]
+            );
+
+        }
+
+        res.json({
+            success: true,
+            message: "Status Updated"
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+            success: false,
+            message: err.message
         });
 
     }

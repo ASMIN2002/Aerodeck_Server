@@ -41,3 +41,32 @@ ORDER BY product_id DESC
     }
 
 };
+exports.getRelatedProducts = async (req, res) => {
+
+    try {
+
+        const { category, exclude } = req.query;
+
+        const [rows] = await pool.query(
+            `
+            SELECT *
+            FROM Products_Aerodeck
+            WHERE product_category = ?
+              AND product_id != ?
+              AND product_status = 1
+            ORDER BY product_id DESC
+            LIMIT 10
+            `,
+            [category, exclude]
+        );
+
+        res.json(rows);
+
+    } catch (err) {
+
+        console.error(err);
+        res.status(500).json({ message: "Server Error" });
+
+    }
+
+};
