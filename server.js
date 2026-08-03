@@ -30,6 +30,7 @@ const userOrderRoutes = require("./routes/user/userOrderRoutes");
 const UserPaymentRoute = require("./routes/user/UserPaymentRoute");
 const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
 const userRoutes = require("./routes/user/userRoutes");
+const reviewRoutes = require("./routes/user/reviewRoutes");
 
 
 
@@ -80,6 +81,7 @@ app.use("/api/user/orders", userOrderRoutes);
 app.use("/api/user/payment", UserPaymentRoute);
 app.use("/api/user/invoice", userInvoiceRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/user/review", reviewRoutes);
 
 
 
