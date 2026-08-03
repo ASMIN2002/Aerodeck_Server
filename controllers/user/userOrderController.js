@@ -4,8 +4,6 @@ const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 exports.placeOrder = async (req, res) => {
 
     try {
-        console.log(req.body);
-
         const {
 
             session_token,
@@ -37,6 +35,12 @@ exports.placeOrder = async (req, res) => {
         }
         const orderNumber = "AD" + Date.now();
 
+        const paymentStatus =
+            payment_method === "COD"
+                ? "PENDING"
+                : order_type === "CARD"
+                    ? "PARTIAL"
+                    : "PAID";
         const [orderResult] = await pool.query(
 
             `INSERT INTO Orders_Aerodeck (
@@ -73,7 +77,7 @@ exports.placeOrder = async (req, res) => {
                 delivery_fee,
                 total_amount,
                 payment_method,
-                payment_method === "COD" ? "PENDING" : "PAID",
+                paymentStatus,
                 "PLACED",
                 address_id
 
@@ -100,7 +104,7 @@ exports.placeOrder = async (req, res) => {
                 order_id,
                 user_id,
                 payment_method,
-                payment_method === "COD" ? "PENDING" : "PAID",
+                paymentStatus,
                 total_amount
             ]
 
@@ -112,6 +116,7 @@ exports.placeOrder = async (req, res) => {
             let productName = "";
             let productImage = "";
             let unitPrice = 0;
+            let cancelDate = null;
 
             if (item.product_id.startsWith("G")) {
 
@@ -119,6 +124,7 @@ exports.placeOrder = async (req, res) => {
                 productName = item.gift_name;
                 productImage = item.gift_image1;
                 unitPrice = Number(item.gift_price);
+                cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
             } else if (item.product_id.startsWith("S")) {
 
@@ -126,9 +132,17 @@ exports.placeOrder = async (req, res) => {
                 productName = item.shop_name;
                 productImage = item.shop_image1;
                 unitPrice = Number(item.shop_price);
+                cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
+            } else {
+                productType = "CARD";
+                productName = item.card_name;
+                productImage = item.card_image1;
+                unitPrice = Number(item.card_price);
+                cancelDate = new Date(
+                    Date.now() + 24 * 60 * 60 * 1000
+                );
             }
-
             await pool.query(
 
                 `INSERT INTO Order_Items_Aerodeck (
@@ -141,11 +155,13 @@ exports.placeOrder = async (req, res) => {
             unit_price,
             quantity,
             total_price,
-            order_status
+            order_status,
+            payment_status,
+            cancel_date
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
                 [
                     order_id,
@@ -156,7 +172,25 @@ exports.placeOrder = async (req, res) => {
                     unitPrice,
                     item.quantity,
                     unitPrice * item.quantity,
-                    "PLACED"
+                    "PLACED",
+                    paymentStatus,
+                    cancelDate
+                ]
+
+            );
+            await pool.query(
+
+                `UPDATE Order_Items_Aerodeck
+     SET payment_status = (
+         SELECT payment_status
+         FROM Orders_Aerodeck
+         WHERE order_id = ?
+     )
+     WHERE order_id = ?`,
+
+                [
+                    order_id,
+                    order_id
                 ]
 
             );
@@ -224,7 +258,7 @@ exports.placeOrder = async (req, res) => {
 
         }
 
-        console.log("Order ID:", order_id);
+
         res.json({
 
             success: true,
@@ -273,6 +307,7 @@ exports.getOrders = async (req, res) => {
             `SELECT
 
                 o.order_id,
+                o.user_id,
                 o.order_number,
                 o.total_items,
                 o.total_amount,
@@ -304,6 +339,46 @@ exports.getOrders = async (req, res) => {
             [user_id]
 
         );
+        for (const order of rows) {
+
+            const [[count]] = await pool.query(
+
+                `SELECT
+            COUNT(*) AS total,
+            SUM(
+                CASE
+                    WHEN order_status != 'CANCELLED'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS available
+         FROM Order_Items_Aerodeck
+         WHERE order_id = ?`,
+
+                [order.order_id]
+
+            );
+
+            order.available_items = Number(count.available || 0);
+            order.total_items = Number(count.total || 0);
+
+            if (order.available_items === 0 && order.total_items > 0) {
+
+                await pool.query(
+
+                    `UPDATE Orders_Aerodeck
+             SET order_status = 'CANCELLED'
+             WHERE order_id = ?`,
+
+                    [order.order_id]
+
+                );
+
+                order.order_status = "CANCELLED";
+
+            }
+
+        }
 
         res.json({
 
@@ -342,7 +417,9 @@ exports.getOrderDetails = async (req, res) => {
     oi.unit_price,
     oi.total_price,
     oi.product_type,
-    oi.order_status
+    oi.order_status,
+    oi.payment_status,
+    oi.cancel_date
 
 FROM Order_Items_Aerodeck oi
 
@@ -369,6 +446,14 @@ WHERE oi.order_id = ?`,
 
                 table = "Shop_Aerodeck";
 
+            } else if (item.product_id.startsWith("P")) {
+
+                table = "Premium_Aerodeck";
+
+            } else {
+
+                table = "Products_Aerodeck";
+
             }
 
             if (!table) {
@@ -387,6 +472,14 @@ WHERE oi.order_id = ?`,
             } else if (item.product_id.startsWith("S")) {
 
                 idColumn = "shop_id";
+
+            } else if (item.product_id.startsWith("P")) {
+
+                idColumn = "premium_id";
+
+            } else {
+
+                idColumn = "product_id";
 
             }
 
@@ -434,6 +527,46 @@ WHERE oi.order_id = ?`,
 
                     product_rating: product[0].shop_rating,
                     product_status: product[0].shop_status
+
+                });
+
+            } else if (item.product_id.startsWith("P")) {
+
+                result.push({
+
+                    ...item,
+
+                    product_name: product[0].premium_name,
+                    product_description: product[0].premium_description,
+                    product_price: product[0].premium_price,
+
+                    product_image1: product[0].premium_image1,
+                    product_image2: product[0].premium_image2,
+                    product_image3: product[0].premium_image3,
+                    product_image4: product[0].premium_image4,
+
+                    product_rating: product[0].premium_rating,
+                    product_status: product[0].premium_status
+
+                });
+
+            } else {
+
+                result.push({
+
+                    ...item,
+
+                    product_name: product[0].product_name,
+                    product_description: product[0].product_description,
+                    product_price: product[0].product_price,
+
+                    product_image1: product[0].product_image1,
+                    product_image2: product[0].product_image2,
+                    product_image3: product[0].product_image3,
+                    product_image4: product[0].product_image4,
+
+                    product_rating: product[0].product_rating,
+                    product_status: product[0].product_status
 
                 });
 
@@ -526,5 +659,129 @@ exports.updateOrderItemStatus = async (req, res) => {
         });
 
     }
+
+};
+
+exports.cancelOrder = async (req, res) => {
+
+    try {
+
+        const {
+
+            order_id,
+            product_id,
+            user_id,
+            product_category,
+            quantity,
+            order_date,
+            payment_status,
+            cancel_reason
+
+        } = req.body;
+
+
+        const mysqlOrderDate = new Date(order_date)
+            .toISOString()
+            .slice(0, 19)
+            .replace("T", " ");
+
+        let paymentStatus = payment_status;
+        if (paymentStatus === "PARTIAL") {
+            paymentStatus = "PAID";
+        }
+
+        let cancelStatus = "REQUESTED";
+
+        if (payment_status === "PENDING") {
+            cancelStatus = "CANCELLED";
+        }
+
+        await pool.query(
+
+            `INSERT INTO Cancel_Aerodeck
+(
+    order_id,
+    product_id,
+    user_id,
+    product_category,
+    quantity,
+    cancel_reason,
+    order_date,
+    payment_status,
+    cancel_status
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
+            [
+                order_id,
+                product_id,
+                user_id,
+                product_category,
+                quantity,
+                cancel_reason,
+                mysqlOrderDate,
+                paymentStatus,
+                cancelStatus
+            ]
+
+        );
+
+        if (cancelStatus === "CANCELLED") {
+
+            await pool.query(
+
+                `UPDATE Order_Items_Aerodeck
+         SET order_status = 'CANCELLED'
+         WHERE order_id = ?
+         AND product_id = ?`,
+
+                [
+                    order_id,
+                    product_id
+                ]
+
+            );
+
+        }
+        res.json({
+
+            success: true,
+            message: "Cancel request submitted."
+
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+
+            success: false,
+            message: err.message
+
+        });
+
+    }
+
+};
+exports.getCancelStatus = async (req, res) => {
+
+    const { order_id, product_id } = req.query;
+
+    const [rows] = await pool.query(
+        `SELECT cancel_status
+         FROM Cancel_Aerodeck
+         WHERE order_id = ?
+         AND product_id = ?
+         LIMIT 1`,
+        [order_id, product_id]
+    );
+
+    res.json({
+        success: true,
+        cancel_status: rows.length
+            ? rows[0].cancel_status
+            : "CANCEL"
+    });
 
 };

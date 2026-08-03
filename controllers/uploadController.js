@@ -804,8 +804,6 @@ exports.uploadUserProfile = async (req, res) => {
                 email,
                 profile_image,
                 profile_image_id,
-                calling_number,
-                whatsapp_number,
                 is_mobile_verified,
                 is_email_verified
              FROM User_Aerodeck

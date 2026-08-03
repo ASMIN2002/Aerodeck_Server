@@ -242,23 +242,25 @@ exports.verifyPayment = async (req, res) => {
         for (const item of items) {
 
             let productType;
+            let cancelDate;
 
             if (String(item.product_id).startsWith("G")) {
 
                 productType = "GIFT";
+                cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
             } else if (String(item.product_id).startsWith("S")) {
 
                 productType = "SHOP";
+                cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
             } else if (String(item.product_id).startsWith("P")) {
 
                 productType = "PREMIUM";
-
+                cancelDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
             } else {
-
                 productType = "CARD";
-
+                cancelDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
             }
 
             const price = Number(
@@ -283,19 +285,20 @@ exports.verifyPayment = async (req, res) => {
             await connection.query(
 
 
-                `INSERT INTO Order_Items_Aerodeck
-    (
-        order_id,
-        product_id,
-        product_type,
-        product_name,
-        product_image,
-        unit_price,
-        quantity,
-        total_price
-    )
-    VALUES
-    (?,?,?,?,?,?,?,?)`,
+                `INSERT INTO Order_Items_Aerodeck(
+    order_id,
+    product_id,
+    product_type,
+    product_name,
+    product_image,
+    unit_price,
+    quantity,
+    total_price,
+    payment_status,
+    cancel_date
+)
+VALUES
+(?,?,?,?,?,?,?,?,?,?)`,
                 [
                     order_id,
                     item.product_id,
@@ -304,7 +307,11 @@ exports.verifyPayment = async (req, res) => {
                     image,
                     price,
                     item.quantity,
-                    price * item.quantity
+                    price * item.quantity,
+                    order_type === "CARD"
+                        ? "PARTIAL"
+                        : "PAID",
+                    cancelDate
                 ]
             );
 
