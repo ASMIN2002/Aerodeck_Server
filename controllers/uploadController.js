@@ -677,7 +677,220 @@ exports.uploadShop = async (req, res) => {
   }
 
 };
+exports.uploadReviewImage = async (req, res) => {
 
+  try {
+
+    const {
+
+      session_token,
+      product_id
+
+    } = req.body;
+
+    const user_id = await getUserIdFromSession(session_token);
+
+    if (!user_id) {
+
+      return res.status(401).json({
+
+        success: false,
+        message: "Invalid session."
+
+      });
+
+    }
+
+    if (!req.file) {
+
+      return res.status(400).json({
+
+        success: false,
+        message: "No image selected."
+
+      });
+
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+
+        {
+
+          folder: "AERODECK/REVIEWS",
+
+          resource_type: "image"
+
+        },
+
+        (err, result) => {
+
+          if (err) {
+
+            return reject(err);
+
+          }
+
+          resolve(result);
+
+        }
+
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    const [insertResult] = await db.query(
+
+      `INSERT INTO Review_Media_AERODECK
+            (
+                user_id,
+                product_id,
+                image_url,
+                public_id
+            )
+            VALUES
+            (?,?,?,?)`,
+
+      [
+
+        user_id,
+        product_id,
+        result.secure_url,
+        result.public_id
+
+      ]
+
+    );
+
+    return res.json({
+
+      success: true,
+
+      media_id: insertResult.insertId,
+
+      image_url: result.secure_url,
+
+      public_id: result.public_id
+
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    return res.status(500).json({
+
+      success: false,
+
+      message: err.message
+
+    });
+
+  }
+
+};
+exports.deleteReviewImage = async (req, res) => {
+
+  try {
+
+    const { media_id } = req.params;
+
+    const { session_token } = req.body;
+
+    const user_id = await getUserIdFromSession(session_token);
+
+    if (!user_id) {
+
+      return res.status(401).json({
+
+        success: false,
+        message: "Invalid session."
+
+      });
+
+    }
+
+    const [rows] = await db.query(
+
+      `SELECT
+
+                public_id
+
+            FROM Review_Media_AERODECK
+
+            WHERE
+
+                media_id = ?
+                AND user_id = ?`,
+
+      [
+
+        media_id,
+        user_id
+
+      ]
+
+    );
+
+    if (rows.length === 0) {
+
+      return res.status(404).json({
+
+        success: false,
+        message: "Image not found."
+
+      });
+
+    }
+
+    await cloudinary.uploader.destroy(
+
+      rows[0].public_id
+
+    );
+
+    await db.query(
+
+      `DELETE FROM Review_Media_AERODECK
+
+             WHERE
+
+                media_id = ?
+                AND user_id = ?`,
+
+      [
+
+        media_id,
+        user_id
+
+      ]
+
+    );
+
+    return res.json({
+
+      success: true,
+      message: "Image deleted successfully."
+
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    return res.status(500).json({
+
+      success: false,
+      message: err.message
+
+    });
+
+  }
+
+};
 
 // USER
 exports.uploadUserProfile = async (req, res) => {

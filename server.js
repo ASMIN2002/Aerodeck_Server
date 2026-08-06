@@ -10,6 +10,7 @@ const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
 const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
+const founderOrderRoutes = require("./routes/founderOrderRoutes");
 
 // SECURITY
 const helmet = require("helmet");
@@ -64,6 +65,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/gifts", giftRoutes);
 app.use("/api/premium", premiumRoutes);
 app.use("/api/shop", shopRoutes);
+app.use("/api/founder/orders", founderOrderRoutes);
 
 
 

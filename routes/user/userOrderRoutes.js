@@ -8,7 +8,9 @@ const {
     getOrderDetails,
     updateOrderItemStatus,
     cancelOrder,
-    getCancelStatus
+    getCancelStatus,
+    updateReturnDate,
+    returnProduct
 
 } = require("../../controllers/user/userOrderController");
 
@@ -18,5 +20,7 @@ router.get("/cancel-status", getCancelStatus);
 router.get("/:order_id", getOrderDetails);
 router.put("/orders/item-status", updateOrderItemStatus);
 router.post("/cancel-order", cancelOrder);
+router.post("/update-return-date", updateReturnDate);
+router.post("/return-product", returnProduct);
 
 module.exports = router;

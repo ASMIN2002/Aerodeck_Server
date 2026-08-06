@@ -6,46 +6,30 @@ const upload =
     require("../config/multer");
 
 const {
-
     uploadProfile,
-
     uploadUserProfile,
-
     removeUserProfile,
-
     uploadProduct,
-
     uploadGift,
-
     uploadPremium,
-
-    uploadShop
-
+    uploadShop,
+    uploadReviewImage,
+    deleteReviewImage
 } = require("../controllers/uploadController");
 
-
 router.post(
-
     "/product",
-
     upload.single("image"),
-
     uploadProduct
-
 );
 
 router.post(
-
     "/gift",
-
     upload.single("image"),
-
     uploadGift
-
 );
 
 router.post(
-
     "/premium",
 
     upload.single("image"),
@@ -88,6 +72,20 @@ router.post(
     "/remove-user-profile",
 
     removeUserProfile
+);
+
+router.post(
+    "/review",
+    upload.single("image"),
+    uploadReviewImage
+);
+
+router.delete(
+
+    "/review/:media_id",
+
+    deleteReviewImage
+
 );
 
 module.exports = router;

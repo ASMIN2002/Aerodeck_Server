@@ -410,6 +410,7 @@ exports.getOrderDetails = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT
+    oi.order_item_id,
     oi.product_id,
     oi.product_name,
     oi.product_image,
@@ -418,13 +419,21 @@ exports.getOrderDetails = async (req, res) => {
     oi.total_price,
     oi.product_type,
     oi.order_status,
+    oi.order_id,
+    oi.created_at AS order_date,
     oi.payment_status,
-    oi.cancel_date
+    oi.cancel_date,
+    oi.return_date,
+    r.return_status,
+    r.return_request_date
 
 FROM Order_Items_Aerodeck oi
 
 INNER JOIN Orders_Aerodeck o
 ON oi.order_id = o.order_id
+
+LEFT JOIN Return_Aerodeck r
+ON oi.order_item_id = r.order_item_id
 
 WHERE oi.order_id = ?`,
 
@@ -596,6 +605,67 @@ WHERE oi.order_id = ?`,
     }
 
 };
+exports.updateReturnDate = async (req, res) => {
+
+    try {
+
+        const { order_id, product_id } = req.body;
+
+        const [rows] = await pool.query(
+            `
+            SELECT return_days
+            FROM User_Product_Detail
+            WHERE product_id = ?
+            `,
+            [product_id]
+        );
+
+        let returnDate = null;
+
+        if (rows.length && Number(rows[0].return_days) > 0) {
+
+            returnDate = new Date();
+
+            returnDate.setDate(
+                returnDate.getDate() + Number(rows[0].return_days)
+            );
+
+        }
+
+        await pool.query(
+            `
+            UPDATE Order_Items_Aerodeck
+            SET
+                return_date = ?,
+                return_status = 'NONE'
+            WHERE
+                order_id = ?
+                AND product_id = ?
+            `,
+            [
+                returnDate,
+                order_id,
+                product_id
+            ]
+        );
+
+        res.json({
+            success: true,
+            message: "Return date updated."
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
 exports.updateOrderItemStatus = async (req, res) => {
 
     try {
@@ -611,7 +681,6 @@ exports.updateOrderItemStatus = async (req, res) => {
              AND product_id = ?`,
             [order_status, order_id, product_id]
         );
-
         // Check remaining items
 
         const [rows] = await pool.query(
@@ -783,5 +852,84 @@ exports.getCancelStatus = async (req, res) => {
             ? rows[0].cancel_status
             : "CANCEL"
     });
+
+};
+exports.returnProduct = async (req, res) => {
+
+    try {
+
+        const {
+            order_item_id,
+            user_id,
+            order_id,
+            product_id,
+            quantity,
+            return_reason,
+            order_date,
+            payment_status
+
+        } = req.body;
+
+        const formattedOrderDate = new Date(order_date)
+            .toISOString()
+            .slice(0, 19)
+            .replace("T", " ");
+
+        let paymentStatus = payment_status;
+
+        if (paymentStatus !== "PAID") {
+
+            paymentStatus = "PENDING";
+
+        }
+
+        await pool.query(
+
+            `INSERT INTO Return_Aerodeck
+    (
+        order_item_id,
+        user_id,
+        order_id,
+        product_id,
+        quantity,
+        return_reason,
+        order_date,
+        payment_status
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
+            [
+                order_item_id,
+                user_id,
+                order_id,
+                product_id,
+                quantity,
+                return_reason,
+                formattedOrderDate,
+                "PENDING"
+            ]
+
+        );
+        res.json({
+
+            success: true,
+            message: "Return request submitted."
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        res.status(500).json({
+
+            success: false,
+            message: err.message
+
+        });
+
+    }
 
 };
