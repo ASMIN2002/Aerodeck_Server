@@ -8,6 +8,7 @@ exports.submitReview = async (req, res) => {
         const {
 
             session_token,
+            order_item_id,
             product_id,
             rating,
             review_message
@@ -30,13 +31,11 @@ exports.submitReview = async (req, res) => {
         const [exists] = await pool.query(
 
             `SELECT rating_id
-             FROM Product_Ratings_AERODECK
-             WHERE product_id = ?
-             AND user_id = ?`,
+FROM Product_Ratings_AERODECK
+WHERE order_item_id = ?`,
 
             [
-                product_id,
-                user_id
+                order_item_id
             ]
 
         );
@@ -56,15 +55,17 @@ exports.submitReview = async (req, res) => {
 
             `INSERT INTO Product_Ratings_AERODECK
             (
+            order_item_id,
                 product_id,
                 user_id,
                 rating,
                 review_message
             )
             VALUES
-            (?,?,?,?)`,
+            (?,?,?,?,?)`,
 
             [
+                order_item_id,
                 product_id,
                 user_id,
                 rating,
@@ -169,7 +170,7 @@ exports.getReview = async (req, res) => {
 
     try {
 
-        const { product_id } = req.params;
+        const { order_item_id } = req.params;
         const { session_token } = req.query;
 
         const user_id = await getUserIdFromSession(session_token);
@@ -188,15 +189,13 @@ exports.getReview = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT
-                rating,
-                review_message
-            FROM Product_Ratings_AERODECK
-            WHERE product_id = ?
-            AND user_id = ?`,
+    rating,
+    review_message
+FROM Product_Ratings_AERODECK
+WHERE order_item_id = ?`,
 
             [
-                product_id,
-                user_id
+                order_item_id
             ]
 
         );
@@ -371,7 +370,7 @@ exports.getMyReviewImages = async (req, res) => {
 
     try {
 
-        const { product_id } = req.params;
+        const { order_item_id } = req.params;
         const { session_token } = req.query;
 
         const user_id = await getUserIdFromSession(session_token);
@@ -390,25 +389,16 @@ exports.getMyReviewImages = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT
-
-                media_id,
-                image_url,
-                public_id
-
-            FROM Review_Media_AERODECK
-
-            WHERE
-
-                user_id = ?
-                AND product_id = ?
-
-            ORDER BY media_id ASC`,
+    media_id,
+    image_url,
+    public_id
+FROM Review_Media_AERODECK
+WHERE
+    order_item_id = ?
+ORDER BY media_id ASC`,
 
             [
-
-                user_id,
-                product_id
-
+                order_item_id
             ]
 
         );
@@ -458,8 +448,8 @@ exports.getReviewMedia = async (req, res) => {
 
     INNER JOIN Product_Ratings_AERODECK r
 
-        ON rm.user_id = r.user_id
-        AND rm.product_id = r.product_id
+        ON rm.order_item_id = r.order_item_id
+    AND rm.user_id = r.user_id
 
     INNER JOIN User_Aerodeck u
 

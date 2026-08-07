@@ -684,10 +684,10 @@ exports.uploadReviewImage = async (req, res) => {
     const {
 
       session_token,
+      order_item_id,
       product_id
 
     } = req.body;
-
     const user_id = await getUserIdFromSession(session_token);
 
     if (!user_id) {
@@ -696,6 +696,27 @@ exports.uploadReviewImage = async (req, res) => {
 
         success: false,
         message: "Invalid session."
+
+      });
+
+    }
+
+    const [[check]] = await db.query(
+
+      `SELECT COUNT(*) AS total
+   FROM Review_Media_AERODECK
+   WHERE order_item_id = ?`,
+
+      [order_item_id]
+
+    );
+
+    if (check.total >= 2) {
+
+      return res.json({
+
+        success: false,
+        message: "Maximum 2 images allowed."
 
       });
 
@@ -745,22 +766,22 @@ exports.uploadReviewImage = async (req, res) => {
     const [insertResult] = await db.query(
 
       `INSERT INTO Review_Media_AERODECK
-            (
-                user_id,
-                product_id,
-                image_url,
-                public_id
-            )
-            VALUES
-            (?,?,?,?)`,
+(
+    order_item_id,
+    user_id,
+    product_id,
+    image_url,
+    public_id
+)
+VALUES
+(?,?,?,?,?)`,
 
       [
-
+        order_item_id,
         user_id,
         product_id,
         result.secure_url,
         result.public_id
-
       ]
 
     );

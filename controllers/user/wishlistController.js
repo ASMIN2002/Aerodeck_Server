@@ -152,16 +152,10 @@ exports.getWishlist = async (req, res) => {
 
             wishlist.push({
 
-                type: "product",
-                product_id: item.product_id,
-                name: item.product_name,
-                description: item.product_description,
-                price: item.product_price,
-                image: item.product_image1,
-                rating: item.product_rating,
-                likes: item.product_total_likes,
-                saves: item.product_total_saves,
-                status: item.product_status,
+                ...item,
+
+                type: "card",
+
                 created_at: wishlistMap[item.product_id]
 
             });
@@ -173,16 +167,10 @@ exports.getWishlist = async (req, res) => {
 
             wishlist.push({
 
+                ...item,
+
                 type: "gift",
-                product_id: item.gift_id,
-                name: item.gift_name,
-                description: item.gift_description,
-                price: item.gift_price,
-                image: item.gift_image1,
-                rating: item.gift_rating,
-                likes: item.gift_total_likes,
-                saves: item.gift_total_saves,
-                status: item.gift_status,
+
                 created_at: wishlistMap[item.gift_id]
 
             });
@@ -193,19 +181,9 @@ exports.getWishlist = async (req, res) => {
         premium.forEach(item => {
 
             wishlist.push({
-
+                ...item,
                 type: "premium",
-                product_id: item.premium_id,
-                name: item.premium_name,
-                description: item.premium_description,
-                price: item.premium_price,
-                image: item.premium_image1,
-                rating: item.premium_rating,
-                likes: item.premium_total_likes,
-                saves: item.premium_total_saves,
-                status: item.premium_status,
                 created_at: wishlistMap[item.premium_id]
-
             });
 
         });
@@ -215,16 +193,10 @@ exports.getWishlist = async (req, res) => {
 
             wishlist.push({
 
+                ...item,
+
                 type: "shop",
-                product_id: item.shop_id,
-                name: item.shop_name,
-                description: item.shop_description,
-                price: item.shop_price,
-                image: item.shop_image1,
-                rating: item.shop_rating,
-                likes: item.shop_total_likes,
-                saves: item.shop_total_saves,
-                status: item.shop_status,
+
                 created_at: wishlistMap[item.shop_id]
 
             });
