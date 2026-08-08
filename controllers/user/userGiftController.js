@@ -8,6 +8,7 @@ exports.getGifts = async (req, res) => {
             SELECT
                 gift_id,
                 gift_name,
+                gift_category,
                 gift_highlight_text,
                 gift_demo_price,
                 gift_discount_percentage,
