@@ -573,33 +573,18 @@ WHERE user_id = ?`,
 
         }
         return res.json({
-
             success: true,
             session_token: sessionToken,
             user: {
-
-                user: {
-
-                    user_id: user.user_id,
-
-                    full_name: user.full_name,
-
-                    mobile_number: user.mobile_number,
-
-                    email: user.email,
-
-                    profile_image: user.profile_image,
-
-                    profile_image_id: user.profile_image_id,
-
-                    is_mobile_verified: user.is_mobile_verified,
-
-                    is_email_verified: user.is_email_verified
-
-                }
-
+                user_id: user.user_id,
+                full_name: user.full_name,
+                mobile_number: user.mobile_number,
+                email: user.email,
+                profile_image: user.profile_image,
+                profile_image_id: user.profile_image_id,
+                is_mobile_verified: user.is_mobile_verified,
+                is_email_verified: user.is_email_verified
             }
-
         });
 
     }
