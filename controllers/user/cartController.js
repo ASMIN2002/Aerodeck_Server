@@ -1,9 +1,7 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
-// ==============================
-// GET CART
-// ==============================
+
 exports.getCart = async (req, res) => {
 
     try {
@@ -107,9 +105,13 @@ exports.getCart = async (req, res) => {
 
                 const [rows] = await pool.query(
 
-                    `SELECT *
-                     FROM Products_Aerodeck
-                     WHERE product_id = ?`,
+                    `SELECT 
+            p.*,
+            d.delivery
+         FROM Products_Aerodeck p
+         LEFT JOIN User_Product_Detail d
+            ON p.product_id = d.product_id
+         WHERE p.product_id = ?`,
 
                     [Number(id)]
 
