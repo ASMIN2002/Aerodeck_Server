@@ -103,23 +103,29 @@ exports.getCart = async (req, res) => {
 
             else {
 
-                const [rows] = await pool.query(
+                const numericId = Number(id);
 
-                    `SELECT 
-            p.*,
-            d.delivery
-         FROM Products_Aerodeck p
-         LEFT JOIN User_Product_Detail d
-            ON p.product_id = d.product_id
-         WHERE p.product_id = ?`,
+                if (!Number.isNaN(numericId)) {
 
-                    [Number(id)]
+                    const [rows] = await pool.query(
 
-                );
+                        `SELECT 
+                p.*,
+                d.delivery
+             FROM Products_Aerodeck p
+             LEFT JOIN User_Product_Detail d
+                ON p.product_id = d.product_id
+             WHERE p.product_id = ?`,
 
-                if (rows.length > 0) {
+                        [numericId]
 
-                    item = rows[0];
+                    );
+
+                    if (rows.length > 0) {
+
+                        item = rows[0];
+
+                    }
 
                 }
 

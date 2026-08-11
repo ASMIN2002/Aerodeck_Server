@@ -736,7 +736,6 @@ exports.cancelOrder = async (req, res) => {
     try {
 
         const {
-
             order_id,
             product_id,
             user_id,
@@ -745,7 +744,6 @@ exports.cancelOrder = async (req, res) => {
             order_date,
             payment_status,
             cancel_reason
-
         } = req.body;
 
 
@@ -754,32 +752,33 @@ exports.cancelOrder = async (req, res) => {
             .slice(0, 19)
             .replace("T", " ");
 
+
         let paymentStatus = payment_status;
+
         if (paymentStatus === "PARTIAL") {
             paymentStatus = "PAID";
         }
 
-        let cancelStatus = "REQUESTED";
 
-        if (payment_status === "PENDING") {
-            cancelStatus = "CANCELLED";
-        }
+        // Cancel request ALWAYS starts with REQUESTED
+        const cancelStatus = "REQUESTED";
+
 
         await pool.query(
 
             `INSERT INTO Cancel_Aerodeck
-(
-    order_id,
-    product_id,
-    user_id,
-    product_category,
-    quantity,
-    cancel_reason,
-    order_date,
-    payment_status,
-    cancel_status
-)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (
+                order_id,
+                product_id,
+                user_id,
+                product_category,
+                quantity,
+                cancel_reason,
+                order_date,
+                payment_status,
+                cancel_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
                 order_id,
@@ -795,29 +794,26 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
         );
 
-        if (cancelStatus === "CANCELLED") {
 
-            await pool.query(
+        await pool.query(
+            `UPDATE Order_Items_Aerodeck
+     SET order_status = 'REQUESTED'
+     WHERE order_id = ?
+     AND product_id = ?`,
+            [
+                order_id,
+                product_id
+            ]
+        );
 
-                `UPDATE Order_Items_Aerodeck
-         SET order_status = 'CANCELLED'
-         WHERE order_id = ?
-         AND product_id = ?`,
-
-                [
-                    order_id,
-                    product_id
-                ]
-
-            );
-
-        }
         res.json({
 
             success: true,
-            message: "Cancel request submitted."
+            message: "Cancel request submitted.",
+            cancel_status: "REQUESTED"
 
         });
+
 
     } catch (err) {
 
