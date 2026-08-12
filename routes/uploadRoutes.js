@@ -15,7 +15,8 @@ const {
     uploadShop,
     uploadReviewImage,
     deleteReviewImage,
-    uploadPaymentProof
+    uploadPaymentProof,
+    createProcessingOrder
 } = require("../controllers/uploadController");
 
 router.post(
@@ -93,6 +94,11 @@ router.delete(
 
     deleteReviewImage
 
+);
+
+router.post(
+    "/processing-order",
+    createProcessingOrder
 );
 
 module.exports = router;

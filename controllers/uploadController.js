@@ -1248,3 +1248,153 @@ exports.uploadPaymentProof = async (req, res) => {
   }
 
 };
+exports.createProcessingOrder = async (req, res) => {
+  try {
+
+    const {
+      product_id,
+      quantity,
+      subtotal,
+      items,
+      discount,
+      gst,
+      platform_fee,
+      delivery_fee,
+      total_amount,
+      advance_amount,
+      remaining_amount,
+      payment_method,
+      address_id,
+      product_type,
+      product_name,
+      product_image,
+      unit_price,
+      total_price
+    } = req.body;
+
+    const connection = await db.getConnection();
+
+    try {
+
+      await connection.beginTransaction();
+
+      const [[lastOrder]] = await connection.query(`
+        SELECT order_id
+        FROM Orders_Aerodeck
+        ORDER BY order_id DESC
+        LIMIT 1
+    `);
+
+      const nextId = (lastOrder?.order_id || 0) + 1;
+
+      const order_number =
+        `AD${new Date().getFullYear()}${String(nextId).padStart(6, "0")}`;
+
+      const [orderResult] = await connection.query(
+        `INSERT INTO Orders_Aerodeck
+        (
+            order_number,
+            user_id,
+            order_type,
+            total_items,
+            subtotal,
+            discount,
+            gst,
+            platform_fee,
+            delivery_fee,
+            total_amount,
+            advance_amount,
+            remaining_amount,
+            payment_method,
+            payment_status,
+            order_status,
+            address_id
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          order_number,
+          user_id,
+          "CARD",
+          quantity,
+          subtotal,
+          discount || 0,
+          gst || 0,
+          platform_fee || 0,
+          delivery_fee || 0,
+          total_amount,
+          advance_amount || 0,
+          remaining_amount || 0,
+          payment_method,
+          "PROCESSING",
+          "PLACED",
+          address_id
+        ]
+      );
+      for (const item of items) {
+
+        await connection.query(
+          `INSERT INTO Order_Items_Aerodeck
+        (
+            order_id,
+            product_id,
+            product_type,
+            product_name,
+            product_image,
+            unit_price,
+            quantity,
+            total_price,
+            order_status,
+            payment_status
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?)`,
+          [
+            orderResult.insertId,
+            item.product_id,
+            item.product_type || "CARD",
+            item.product_name,
+            item.product_image || null,
+            item.unit_price,
+            item.quantity,
+            item.total_price,
+            "PLACED",
+            "PROCESSING"
+          ]
+        );
+
+      }
+
+      await connection.commit();
+
+      connection.release();
+
+      return res.json({
+        success: true,
+        order_id: orderResult.insertId,
+        order_number,
+        message: "Processing order created."
+      });
+
+    } catch (err) {
+
+      await connection.rollback();
+      connection.release();
+
+      throw err;
+    }
+
+    return res.json({
+      success: true,
+      message: "Processing order function ready."
+    });
+
+  } catch (err) {
+
+    console.error("PROCESSING ORDER ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
+};
