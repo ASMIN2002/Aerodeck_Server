@@ -692,3 +692,61 @@ exports.updateCardDetails = async (req, res) => {
     }
 
 };
+// ==============================
+// CHECK CARD DETAILS
+// ==============================
+
+exports.checkCardDetails = async (req, res) => {
+
+    try {
+
+        const {
+            session_token,
+            product_id
+        } = req.query;
+
+        const user_id =
+            await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+
+        }
+
+        const [rows] = await pool.query(
+
+            `SELECT *
+             FROM UserCardsDetails
+             WHERE user_id = ?
+             AND product_id = ?
+             LIMIT 1`,
+
+            [
+                user_id,
+                product_id
+            ]
+
+        );
+
+        res.json({
+
+            success: true,
+            exists: rows.length > 0,
+            data: rows[0] || null
+
+        });
+
+    } catch (err) {
+
+        console.log(err);
+
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

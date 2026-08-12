@@ -1143,3 +1143,108 @@ exports.removeUserProfile = async (req, res) => {
   }
 
 };
+
+exports.uploadPaymentProof = async (req, res) => {
+
+  try {
+
+    const {
+      session_token,
+      product_id,
+      order_id,
+      name,
+      number
+    } = req.body;
+
+    const user_id =
+      await getUserIdFromSession(session_token);
+
+    if (!user_id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired session."
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment screenshot is required."
+      });
+    }
+
+    if (!product_id || !name || !number) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment details are required."
+      });
+    }
+
+    // Upload screenshot to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "AERODECK/PAYMENTS",
+          resource_type: "image"
+        },
+        (err, uploaded) => {
+
+          if (err) {
+            return reject(err);
+          }
+
+          resolve(uploaded);
+
+        }
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    // Save payment details
+    await db.query(
+      `INSERT INTO UserPaymentDetails
+            (
+                user_id,
+                product_id,
+                upload_image_url,
+                url_id,
+                name,
+                number,
+                payment_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        user_id,
+        product_id,
+        result.secure_url,
+        result.public_id,
+        name,
+        number
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: "Payment proof uploaded successfully.",
+      url: result.secure_url,
+      url_id: result.public_id
+    });
+
+  } catch (err) {
+
+    console.error(
+      "PAYMENT PROOF UPLOAD ERROR:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: err.sqlMessage || err.message
+    });
+
+  }
+
+};

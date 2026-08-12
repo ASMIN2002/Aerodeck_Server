@@ -418,3 +418,108 @@ VALUES
     }
 
 };
+exports.savePaymentDetails = async (req, res) => {
+
+    try {
+
+        const {
+            session_token,
+            product_id,
+            order_id,
+            upload_image_url,
+            url_id,
+            name,
+            number
+        } = req.body;
+
+        const user_id =
+            await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        if (
+            !product_id ||
+            !order_id ||
+            !upload_image_url ||
+            !url_id ||
+            !name ||
+            !number
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "All payment details are required."
+            });
+        }
+
+        // Save payment details
+        await pool.query(
+            `INSERT INTO UserPaymentDetails
+            (
+                user_id,
+                product_id,
+                upload_image_url,
+                url_id,
+                name,
+                number,
+                payment_date
+            )
+            VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+            [
+                user_id,
+                product_id,
+                upload_image_url,
+                url_id,
+                name,
+                number
+            ]
+        );
+
+        // Update main order
+        await pool.query(
+            `UPDATE Orders_Aerodeck
+             SET payment_status = 'PROCESSING'
+             WHERE order_id = ?
+             AND user_id = ?`,
+            [
+                order_id,
+                user_id
+            ]
+        );
+
+        // Update order item also
+        await pool.query(
+            `UPDATE Order_Items_Aerodeck
+             SET payment_status = 'PROCESSING'
+             WHERE order_id = ?
+             AND product_id = ?`,
+            [
+                order_id,
+                product_id
+            ]
+        );
+
+        return res.json({
+            success: true,
+            message: "Payment details saved successfully."
+        });
+
+    } catch (error) {
+
+        console.error(
+            "SAVE PAYMENT DETAILS ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: error.sqlMessage || error.message
+        });
+
+    }
+
+};

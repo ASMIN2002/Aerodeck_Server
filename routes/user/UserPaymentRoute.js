@@ -10,4 +10,6 @@ router.post("/create-order", paymentController.createOrder);
 
 router.post("/verify", paymentController.verifyPayment);
 
+router.post("/save-details", paymentController.savePaymentDetails);
+
 module.exports = router;

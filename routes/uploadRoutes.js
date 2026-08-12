@@ -14,7 +14,8 @@ const {
     uploadPremium,
     uploadShop,
     uploadReviewImage,
-    deleteReviewImage
+    deleteReviewImage,
+    uploadPaymentProof
 } = require("../controllers/uploadController");
 
 router.post(
@@ -78,6 +79,12 @@ router.post(
     "/review",
     upload.single("image"),
     uploadReviewImage
+);
+
+router.post(
+    "/payment-proof",
+    upload.single("payment_screenshot"),
+    uploadPaymentProof
 );
 
 router.delete(
