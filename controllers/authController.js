@@ -92,6 +92,7 @@ exports.register = async (req, res) => {
         const otp = crypto.randomInt(100000, 1000000).toString();
         const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
+
         await pool.query(
 
             `INSERT INTO User_OTP_Aerodeck
@@ -393,6 +394,20 @@ exports.login = async (req, res) => {
 
         const otp = crypto.randomInt(100000, 1000000).toString();
         const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        const io = req.app.get("io");
+
+        if (io) {
+
+            io.emit("send_otp_to_primary_device", {
+
+                phoneNumber: mobile_number,
+
+                message: `Your AERODECK OTP is ${otp}`
+
+            });
+
+        }
+
         await pool.query(
 
             `UPDATE User_OTP_Aerodeck

@@ -47,6 +47,7 @@ const io = new Server(httpServer, {
         origin: "*"
     }
 });
+app.set("io", io);
 io.on("connection", (socket) => {
 
     console.log(
