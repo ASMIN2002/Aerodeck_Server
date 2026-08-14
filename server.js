@@ -166,7 +166,8 @@ io.on("connection", (socket) => {
 app.use(helmet());
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://localhost"
+    "https://localhost",
+    "http://localhost:3000"
 ];
 
 app.use(cors({
