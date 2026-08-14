@@ -335,7 +335,6 @@ WHERE user_id = ?`,
 };
 
 exports.login = async (req, res) => {
-
     try {
 
         const { mobile_number } = req.body;
