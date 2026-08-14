@@ -140,7 +140,7 @@ io.on("connection", (socket) => {
 
             type: "TEST",
 
-            phoneNumber: "9938482838",
+            phoneNumber: "7847828859",
 
             message: "AERODECK TEST OTP 123456"
 
