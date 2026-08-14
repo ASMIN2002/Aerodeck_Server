@@ -1,5 +1,7 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const cors = require("cors");
 const pool = require("./config/db");
 const uploadRoutes = require("./routes/uploadRoutes");
@@ -10,7 +12,7 @@ const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
 const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
-const founderOrderRoutes = require("./routes/founderOrderRoutes"); 
+const founderOrderRoutes = require("./routes/founderOrderRoutes");
 
 
 // SECURITY
@@ -38,6 +40,124 @@ const smsRoutes = require("./routes/smsRoutes");
 
 
 const app = express();
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+    cors: {
+        origin: true,
+        credentials: true
+    }
+});
+
+io.on("connection", (socket) => {
+
+    console.log(
+        "SMS device connected:",
+        socket.id
+    );
+    socket.on("register_sms_device", async (data) => {
+
+        try {
+
+            const {
+                device_id,
+                device_token
+            } = data;
+
+            const [rows] = await pool.query(
+                `SELECT
+                device_id,
+                is_primary,
+                is_active
+             FROM SMS_Device_Aerodeck
+             WHERE device_id = ?
+             AND device_token = ?
+             LIMIT 1`,
+                [
+                    device_id,
+                    device_token
+                ]
+            );
+
+            if (rows.length === 0) {
+
+                socket.emit(
+                    "sms_device_verified",
+                    {
+                        success: false,
+                        message: "Invalid SMS device."
+                    }
+                );
+
+                return;
+
+            }
+
+            if (rows[0].is_active !== 1) {
+
+                socket.emit(
+                    "sms_device_verified",
+                    {
+                        success: false,
+                        message: "SMS device is inactive."
+                    }
+                );
+
+                return;
+
+            }
+
+            socket.emit(
+                "sms_device_verified",
+                {
+                    success: true,
+                    is_primary:
+                        rows[0].is_primary === 1
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                "SMS device verification error:",
+                error
+            );
+
+            socket.emit(
+                "sms_device_verified",
+                {
+                    success: false,
+                    message: "Device verification failed."
+                }
+            );
+
+        }
+
+    });
+
+    socket.on("test_sms_command", () => {
+
+        socket.emit("sms_command", {
+
+            type: "TEST",
+
+            phoneNumber: "7847828859",
+
+            message: "AERODECK TEST OTP 123456"
+
+        });
+
+    });
+    socket.on("disconnect", () => {
+
+        console.log(
+            "SMS device disconnected:",
+            socket.id
+        );
+
+    });
+
+});
 app.use(helmet());
 const allowedOrigins = [
     "http://localhost:5173",
@@ -352,7 +472,7 @@ app.get("/api/offers/count", async (req, res) => {
     }
 
 });
-app.listen(process.env.PORT, () => {
+httpServer.listen(process.env.PORT, () => {
 
     console.log(
         `Server running on port ${process.env.PORT}`
