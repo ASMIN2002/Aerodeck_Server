@@ -106,6 +106,12 @@ io.on("connection", (socket) => {
 
             }
 
+            if (rows[0].is_primary === 1) {
+
+                socket.join("sms_primary");
+
+            }
+
             socket.emit(
                 "sms_device_verified",
                 {
