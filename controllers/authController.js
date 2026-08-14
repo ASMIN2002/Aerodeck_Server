@@ -89,42 +89,34 @@ exports.register = async (req, res) => {
 
         const userId = result.insertId;
 
-        const otp = Math.floor(
-
-            100000 + Math.random() * 900000
-
-        ).toString();
+        const otp = crypto.randomInt(100000, 1000000).toString();
+        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
         await pool.query(
 
             `INSERT INTO User_OTP_Aerodeck
     (
         user_id,
-        login_otp
+        login_otp,
+        otp_expires_at
     )
     VALUES
     (
+        ?,
         ?,
         ?
     )`,
 
             [
                 userId,
-                otp
+                otp,
+                otpExpiresAt
             ]
 
         );
-
-        console.log("REGISTER OTP :", otp);
-
         return res.json({
-
             success: true,
-
-            message: "OTP generated successfully.",
-
-            demoOtp: otp
-
+            message: "OTP sent successfully."
         });
 
     }
@@ -194,7 +186,7 @@ exports.verifyRegisterOtp = async (req, res) => {
         const [otpRows] = await pool.query(
 
             `SELECT
-    login_otp
+    login_otp, otp_expires_at
 FROM User_OTP_Aerodeck
 WHERE user_id = ?`,
 
@@ -213,7 +205,15 @@ WHERE user_id = ?`,
             });
 
         }
-
+        if (
+            !otpRows[0].otp_expires_at ||
+            new Date() > new Date(otpRows[0].otp_expires_at)
+        ) {
+            return res.json({
+                success: false,
+                message: "OTP expired."
+            });
+        }
         if (otpRows[0].login_otp !== otp) {
 
             return res.json({
@@ -225,15 +225,19 @@ WHERE user_id = ?`,
             });
 
         }
+        await pool.query(
+            `UPDATE User_Aerodeck
+     SET is_mobile_verified = 1
+     WHERE user_id = ?`,
+            [user.user_id]
+        );
 
         await pool.query(
-
-            `UPDATE User_Aerodeck
-             SET is_mobile_verified = 1
-             WHERE user_id = ?`,
-
+            `UPDATE User_OTP_Aerodeck
+     SET login_otp = NULL,
+         otp_expires_at = NULL
+     WHERE user_id = ?`,
             [user.user_id]
-
         );
 
         const sessionToken = crypto.randomBytes(32).toString("hex");
@@ -387,31 +391,24 @@ exports.login = async (req, res) => {
 
         const user = users[0];
 
-        const otp = Math.floor(
-            100000 + Math.random() * 900000
-        ).toString();
+        const otp = crypto.randomInt(100000, 1000000).toString();
+        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
         await pool.query(
 
             `UPDATE User_OTP_Aerodeck
-     SET login_otp = ?
-     WHERE user_id = ?`,
-
+SET login_otp = ?,
+    otp_expires_at = ?
+WHERE user_id = ?`,
             [
                 otp,
+                otpExpiresAt,
                 user.user_id
             ]
 
         );
-        console.log("LOGIN OTP :", otp);
-
         return res.json({
-
             success: true,
-
-            message: "OTP generated successfully.",
-
-            demoOtp: otp
-
+            message: "OTP sent successfully."
         });
 
     }
@@ -483,28 +480,31 @@ WHERE mobile_number = ?`,
         const user = users[0];
 
         const [otpRows] = await pool.query(
-
             `SELECT
-    login_otp
-FROM User_OTP_Aerodeck
-WHERE user_id = ?`,
-
+        login_otp,
+        otp_expires_at
+     FROM User_OTP_Aerodeck
+     WHERE user_id = ?`,
             [user.user_id]
-
         );
 
         if (otpRows.length === 0) {
-
             return res.json({
-
                 success: false,
-
                 message: "OTP not found."
-
             });
-
         }
-        const sessionToken = crypto.randomBytes(32).toString("hex");
+
+        if (
+            !otpRows[0].otp_expires_at ||
+            new Date() > new Date(otpRows[0].otp_expires_at)
+        ) {
+            return res.json({
+                success: false,
+                message: "OTP expired."
+            });
+        }
+        // const sessionToken = crypto.randomBytes(32).toString("hex");
 
         if (otpRows[0].login_otp !== otp) {
 
@@ -519,6 +519,15 @@ WHERE user_id = ?`,
             });
 
         }
+        const sessionToken = crypto.randomBytes(32).toString("hex");
+        await pool.query(
+            `UPDATE User_OTP_Aerodeck
+     SET login_otp = NULL,
+         otp_expires_at = NULL
+     WHERE user_id = ?`,
+            [user.user_id]
+        );
+
         await pool.query(
             `UPDATE User_Session_Aerodeck
      SET is_active = 0

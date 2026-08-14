@@ -129,3 +129,53 @@ exports.updateName = async (req, res) => {
     }
 
 };
+// ===============================
+// GET WHATSAPP ORDER DATA
+// ===============================
+exports.getWhatsAppOrderData = async (req, res) => {
+
+    try {
+
+        const { session_token, product_id } = req.body;
+
+        if (!session_token) {
+            return res.status(401).json({
+                success: false,
+                message: "Session token is required."
+            });
+        }
+
+        if (!product_id) {
+            return res.status(400).json({
+                success: false,
+                message: "Product ID is required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        return res.json({
+            success: true,
+            user_id: user_id,
+            product_id: product_id
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error."
+        });
+
+    }
+
+};

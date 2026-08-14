@@ -19,4 +19,12 @@ router.put(
     userController.updateName
 );
 
+// ===============================
+// GET WHATSAPP ORDER DATA
+// ===============================
+router.post(
+    "/whatsapp-order-data",
+    userController.getWhatsAppOrderData
+);
+
 module.exports = router;

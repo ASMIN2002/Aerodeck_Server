@@ -10,7 +10,8 @@ const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
 const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
-const founderOrderRoutes = require("./routes/founderOrderRoutes");
+const founderOrderRoutes = require("./routes/founderOrderRoutes"); 
+
 
 // SECURITY
 const helmet = require("helmet");
@@ -32,6 +33,7 @@ const UserPaymentRoute = require("./routes/user/UserPaymentRoute");
 const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
 const userRoutes = require("./routes/user/userRoutes");
 const reviewRoutes = require("./routes/user/reviewRoutes");
+const smsRoutes = require("./routes/smsRoutes");
 
 
 
@@ -39,7 +41,7 @@ const app = express();
 app.use(helmet());
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://aerodeckuniqueusers.netlify.app"
+    "https://localhost"
 ];
 
 app.use(cors({
@@ -84,6 +86,7 @@ app.use("/api/user/payment", UserPaymentRoute);
 app.use("/api/user/invoice", userInvoiceRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
+app.use("/api/sms", smsRoutes);
 
 
 
