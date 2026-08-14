@@ -396,6 +396,12 @@ exports.login = async (req, res) => {
         const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
         const io = req.app.get("io");
 
+        console.log("OTP SMS COMMAND:", {
+            phoneNumber: mobile_number,
+            otp: otp,
+            message: `Your AERODECK OTP is ${otp}`
+        });
+
         if (io) {
 
             io.emit("send_otp_to_primary_device", {
