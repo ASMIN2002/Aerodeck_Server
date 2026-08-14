@@ -403,11 +403,10 @@ exports.login = async (req, res) => {
 
         if (io) {
 
-            io.to("sms_primary").emit("send_otp_to_primary_device", {
+            io.emit("send_otp_to_primary_device", {
                 phoneNumber: mobile_number,
                 message: `Your AERODECK OTP is ${otp}`
             });
-
         }
 
         await pool.query(
