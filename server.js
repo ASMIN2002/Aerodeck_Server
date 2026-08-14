@@ -44,11 +44,9 @@ const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
     cors: {
-        origin: true,
-        credentials: true
+        origin: "*"
     }
 });
-
 io.on("connection", (socket) => {
 
     console.log(
