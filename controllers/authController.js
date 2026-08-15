@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const pendingRegistrations = new Map();
 
 exports.register = async (req, res) => {
-
+    console.log("🔥 NEW REGISTER CONTROLLER HIT");
     try {
 
         const {
