@@ -1,6 +1,7 @@
 const pool = require("../config/db");
 const crypto = require("crypto");
 const pendingRegistrations = new Map();
+const pendingLoginOtps = new Map();
 
 exports.register = async (req, res) => {
     console.log("🔥 NEW REGISTER CONTROLLER HIT");
@@ -332,7 +333,20 @@ exports.login = async (req, res) => {
         const user = users[0];
 
         const otp = crypto.randomInt(100000, 1000000).toString();
-        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+        const otpExpiresAt =
+            Date.now() + (5 * 60 * 1000);
+
+        pendingLoginOtps.set(
+            mobile_number,
+            {
+                user_id: user.user_id,
+                mobile_number: user.mobile_number,
+                otp,
+                otpExpiresAt
+            }
+        );
+
         const io = req.app.get("io");
 
         console.log("OTP SMS COMMAND:", {
@@ -343,25 +357,15 @@ exports.login = async (req, res) => {
 
         if (io) {
 
-            io.emit("send_otp_to_primary_device", {
-                phoneNumber: mobile_number,
-                message: `Your AERODECK OTP is ${otp}`
-            });
+            io.emit(
+                "send_otp_to_primary_device",
+                {
+                    phoneNumber: mobile_number,
+                    message: `Your AERODECK OTP is ${otp}`
+                }
+            );
+
         }
-
-        await pool.query(
-
-            `UPDATE User_OTP_Aerodeck
-SET login_otp = ?,
-    otp_expires_at = ?
-WHERE user_id = ?`,
-            [
-                otp,
-                otpExpiresAt,
-                user.user_id
-            ]
-
-        );
         return res.json({
             success: true,
             message: "OTP sent successfully."
@@ -415,7 +419,8 @@ exports.verifyLoginOtp = async (req, res) => {
     is_mobile_verified,
     is_email_verified
 FROM User_Aerodeck
-WHERE mobile_number = ?`,
+WHERE mobile_number = ?
+  AND is_mobile_verified = 1`,
 
             [mobile_number]
 
@@ -435,54 +440,90 @@ WHERE mobile_number = ?`,
 
         const user = users[0];
 
-        const [otpRows] = await pool.query(
-            `SELECT
-        login_otp,
-        otp_expires_at
-     FROM User_OTP_Aerodeck
-     WHERE user_id = ?`,
-            [user.user_id]
-        );
+        const pending =
+            pendingLoginOtps.get(mobile_number);
 
-        if (otpRows.length === 0) {
+        if (!pending) {
+
             return res.json({
                 success: false,
-                message: "OTP not found."
+                message: "OTP not found or expired."
             });
+
         }
 
-        if (
-            !otpRows[0].otp_expires_at ||
-            new Date() > new Date(otpRows[0].otp_expires_at)
-        ) {
+        if (pending.user_id !== user.user_id) {
+
+            return res.json({
+                success: false,
+                message: "Invalid OTP."
+            });
+
+        }
+
+        if (Date.now() > pending.otpExpiresAt) {
+
+            pendingLoginOtps.delete(mobile_number);
+
             return res.json({
                 success: false,
                 message: "OTP expired."
             });
+
         }
-        // const sessionToken = crypto.randomBytes(32).toString("hex");
 
-        if (otpRows[0].login_otp !== otp) {
-
-
+        if (pending.otp !== otp) {
 
             return res.json({
-
                 success: false,
-
                 message: "Invalid OTP."
-
             });
 
         }
         const sessionToken = crypto.randomBytes(32).toString("hex");
-        await pool.query(
-            `UPDATE User_OTP_Aerodeck
-     SET login_otp = NULL,
-         otp_expires_at = NULL
-     WHERE user_id = ?`,
+
+        const [otpRows] = await pool.query(
+            `SELECT user_id
+     FROM User_OTP_Aerodeck
+     WHERE user_id = ?
+     LIMIT 1`,
             [user.user_id]
         );
+
+        if (otpRows.length > 0) {
+
+            await pool.query(
+                `UPDATE User_OTP_Aerodeck
+         SET login_otp = ?,
+             otp_expires_at = ?
+         WHERE user_id = ?`,
+                [
+                    pending.otp,
+                    new Date(pending.otpExpiresAt),
+                    user.user_id
+                ]
+            );
+
+        } else {
+
+            await pool.query(
+                `INSERT INTO User_OTP_Aerodeck
+        (
+            user_id,
+            login_otp,
+            otp_expires_at
+        )
+        VALUES (?, ?, ?)`,
+                [
+                    user.user_id,
+                    pending.otp,
+                    new Date(pending.otpExpiresAt)
+                ]
+            );
+
+        }
+
+        pendingLoginOtps.delete(mobile_number);
 
         await pool.query(
             `UPDATE User_Session_Aerodeck
@@ -585,11 +626,15 @@ exports.checkSession = async (req, res) => {
         }
 
         const [sessionRows] = await pool.query(
-            `SELECT user_id
-             FROM User_Session_Aerodeck
-             WHERE session_token = ?
-             AND is_active = 1
-             LIMIT 1`,
+            `SELECT
+        session_id,
+        user_id,
+        last_active_at
+     FROM User_Session_Aerodeck
+     WHERE session_token = ?
+       AND is_active = 1
+       AND last_active_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+     LIMIT 1`,
             [sessionToken]
         );
 
@@ -601,6 +646,13 @@ exports.checkSession = async (req, res) => {
             });
 
         }
+        await pool.query(
+            `UPDATE User_Session_Aerodeck
+     SET last_active_at = CURRENT_TIMESTAMP
+     WHERE session_id = ?`,
+            [sessionRows[0].session_id]
+        );
+
 
         const [userRows] = await pool.query(
             `SELECT *
