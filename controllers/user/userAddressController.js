@@ -466,22 +466,19 @@ const getPincodeDetails = async (req, res) => {
             ?.toLowerCase()
             .trim();
 
-        if (district !== "balasore") {
-
+        if (
+            district !== "balasore" &&
+            district !== "baleswar"
+        ) {
             return res.json({
                 success: false,
                 delivery_available: false,
                 message: "Delivery only available inside Balasore."
             });
-
         }
-
         return res.json({
-
             success: true,
-
             location: {
-
                 pincode,
                 area: firstOffice.Name,
                 post_office: firstOffice.Name,
@@ -490,7 +487,6 @@ const getPincodeDetails = async (req, res) => {
                 state: firstOffice.State,
                 country: firstOffice.Country,
             },
-
             areas: data[0].PostOffice.map(item => item.Name)
 
         });
