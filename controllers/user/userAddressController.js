@@ -467,8 +467,8 @@ const getPincodeDetails = async (req, res) => {
             .trim();
 
         if (
-            district !== "Balasore" &&
-            district !== "Baleswar"
+            district !== "balasore" &&
+            district !== "baleshwar"
         ) {
             return res.json({
                 success: false,
