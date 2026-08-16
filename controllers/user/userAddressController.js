@@ -462,6 +462,19 @@ const getPincodeDetails = async (req, res) => {
         }
 
         const firstOffice = data[0].PostOffice[0];
+        const district = firstOffice.District
+            ?.toLowerCase()
+            .trim();
+
+        if (district !== "balasore") {
+
+            return res.json({
+                success: false,
+                delivery_available: false,
+                message: "Delivery only available inside Balasore."
+            });
+
+        }
 
         return res.json({
 
