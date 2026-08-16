@@ -470,11 +470,15 @@ const getPincodeDetails = async (req, res) => {
             district !== "balasore" &&
             district !== "baleshwar"
         ) {
+
             return res.json({
                 success: false,
                 delivery_available: false,
+                district_received: firstOffice.District,
+                pincode_received: pincode,
                 message: "Delivery only available inside Balasore."
             });
+
         }
         return res.json({
             success: true,
