@@ -276,11 +276,12 @@ exports.sendEmailOtp = async (req, res) => {
 
     } catch (err) {
 
-        console.error(err);
+        console.error("SEND EMAIL OTP ERROR:", err);
 
         return res.status(500).json({
             success: false,
-            message: "Failed to send OTP."
+            message: err.message,
+            error: err.code || "UNKNOWN_ERROR"
         });
 
     }
