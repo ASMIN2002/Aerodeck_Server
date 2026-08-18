@@ -1,46 +1,35 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: Number(process.env.EMAIL_PORT),
-    secure: process.env.EMAIL_SECURE === "true",
-
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD
-    },
-
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendEmailOtp(email, otp) {
 
-    console.log("EMAIL START");
-    console.log("EMAIL HOST:", process.env.EMAIL_HOST);
-    console.log("EMAIL PORT:", process.env.EMAIL_PORT);
-    console.log("EMAIL USER:", process.env.EMAIL_USER);
-    console.log(
-        "EMAIL PASSWORD EXISTS:",
-        !!process.env.EMAIL_APP_PASSWORD
-    );
+    console.log("RESEND EMAIL START");
 
     try {
 
-        const info = await transporter.sendMail({
-            from: `"HEEPIT" <${process.env.EMAIL_USER}>`,
-            to: email,
+        const { data, error } = await resend.emails.send({
+            from: "HEEPIT <onboarding@resend.dev>",
+            to: [email],
             subject: "HEEPIT Email Verification OTP",
 
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
 
-                    <h2>HEEPIT Email Verification</h2>
+                    <h2 style="margin-bottom: 10px;">
+                        HEEPIT Email Verification
+                    </h2>
 
-                    <p>Your verification OTP is:</p>
+                    <p>
+                        Your verification OTP is:
+                    </p>
 
-                    <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 20px 0;">
+                    <div style="
+                        font-size: 32px;
+                        font-weight: bold;
+                        letter-spacing: 8px;
+                        margin: 20px 0;
+                    ">
                         ${otp}
                     </div>
 
@@ -56,17 +45,14 @@ async function sendEmailOtp(email, otp) {
             `
         });
 
-        transporter.verify((error, success) => {
-            if (error) {
-                console.error("SMTP VERIFY ERROR:", error);
-            } else {
-                console.log("SMTP SERVER READY");
-            }
-        });
+        if (error) {
+            console.error("RESEND ERROR:", error);
+            throw new Error(error.message);
+        }
 
-        console.log("EMAIL SENT:", info.messageId);
+        console.log("RESEND EMAIL SENT:", data?.id);
 
-        return info;
+        return data;
 
     } catch (err) {
 
