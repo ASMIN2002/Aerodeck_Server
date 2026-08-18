@@ -1,56 +1,80 @@
-const nodemailer = require("nodemailer");
+const brevo = require("@getbrevo/brevo");
 
-const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
+const apiInstance = new brevo.TransactionalEmailsApi();
 
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD
-    },
-
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-});
+apiInstance.setApiKey(
+    brevo.TransactionalEmailsApiApiKeys.apiKey,
+    process.env.BREVO_API_KEY
+);
 
 async function sendEmailOtp(email, otp) {
 
-    console.log("EMAIL SEND START:", email);
+    console.log("BREVO EMAIL SEND START:", email);
 
-    const info = await transporter.sendMail({
-        from: `"AERODECK" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "AERODECK Email Verification OTP",
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
 
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
-                <h2>AERODECK Email Verification</h2>
+    sendSmtpEmail.subject = "HEEPIT Email Verification OTP";
 
-                <p>Your verification OTP is:</p>
+    sendSmtpEmail.sender = {
+        name: "HEEPIT",
+        email: "heepit.official@gmail.com"
+    };
 
-                <div style="
-                    font-size: 32px;
-                    font-weight: bold;
-                    letter-spacing: 8px;
-                    margin: 20px 0;
-                ">
-                    ${otp}
-                </div>
+    sendSmtpEmail.to = [
+        {
+            email: email
+        }
+    ];
 
-                <p>This OTP is valid for <b>5 minutes</b>.</p>
+    sendSmtpEmail.htmlContent = `
+        <div style="
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: auto;
+            padding: 20px;
+        ">
 
-                <p style="color: #777;">
-                    If you did not request this OTP, please ignore this email.
-                </p>
+            <h2>HEEPIT Email Verification</h2>
+
+            <p>Your verification OTP is:</p>
+
+            <div style="
+                font-size: 32px;
+                font-weight: bold;
+                letter-spacing: 8px;
+                margin: 20px 0;
+            ">
+                ${otp}
             </div>
-        `
-    });
 
-    console.log("EMAIL SENT:", info.messageId);
+            <p>
+                This OTP is valid for <b>5 minutes</b>.
+            </p>
 
-    return info;
+            <p style="color: #777;">
+                If you did not request this OTP, please ignore this email.
+            </p>
+
+        </div>
+    `;
+
+    try {
+
+        const result = await apiInstance.sendTransacEmail(
+            sendSmtpEmail
+        );
+
+        console.log("BREVO EMAIL SENT:", result);
+
+        return result;
+
+    } catch (err) {
+
+        console.error("BREVO EMAIL ERROR:", err);
+
+        throw err;
+
+    }
 }
 
 module.exports = {
