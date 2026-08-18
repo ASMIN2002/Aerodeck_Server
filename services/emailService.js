@@ -1,66 +1,51 @@
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_APP_PASSWORD
+    }
+});
 
 async function sendEmailOtp(email, otp) {
 
-    console.log("RESEND EMAIL START");
+    await transporter.sendMail({
 
-    try {
+        from: `"AERODECK" <${process.env.EMAIL_USER}>`,
 
-        const { data, error } = await resend.emails.send({
-            from: "HEEPIT <onboarding@resend.dev>",
-            to: [email],
-            subject: "HEEPIT Email Verification OTP",
+        to: email,
 
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
+        subject: "AERODECK Email Verification OTP",
 
-                    <h2 style="margin-bottom: 10px;">
-                        HEEPIT Email Verification
-                    </h2>
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
 
-                    <p>
-                        Your verification OTP is:
-                    </p>
+                <h2>AERODECK Email Verification</h2>
 
-                    <div style="
-                        font-size: 32px;
-                        font-weight: bold;
-                        letter-spacing: 8px;
-                        margin: 20px 0;
-                    ">
-                        ${otp}
-                    </div>
+                <p>Your verification OTP is:</p>
 
-                    <p>
-                        This OTP is valid for <b>5 minutes</b>.
-                    </p>
-
-                    <p style="color: #777;">
-                        If you did not request this OTP, please ignore this email.
-                    </p>
-
+                <div style="
+                    font-size: 32px;
+                    font-weight: bold;
+                    letter-spacing: 8px;
+                    margin: 20px 0;
+                ">
+                    ${otp}
                 </div>
-            `
-        });
 
-        if (error) {
-            console.error("RESEND ERROR:", error);
-            throw new Error(error.message);
-        }
+                <p>
+                    This OTP is valid for <b>5 minutes</b>.
+                </p>
 
-        console.log("RESEND EMAIL SENT:", data?.id);
+                <p style="color: #777;">
+                    If you did not request this OTP, please ignore this email.
+                </p>
 
-        return data;
-
-    } catch (err) {
-
-        console.error("EMAIL SEND ERROR:", err);
-
-        throw err;
-
-    }
+            </div>
+        `
+    });
 }
 
 module.exports = {
