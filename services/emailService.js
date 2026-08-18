@@ -13,37 +13,56 @@ const transporter = nodemailer.createTransport({
 
 async function sendEmailOtp(email, otp) {
 
-    await transporter.sendMail({
-        from: `"HEEPIT" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "HEEPIT Email Verification OTP",
+    console.log("EMAIL START");
+    console.log("EMAIL HOST:", process.env.EMAIL_HOST);
+    console.log("EMAIL PORT:", process.env.EMAIL_PORT);
+    console.log("EMAIL USER:", process.env.EMAIL_USER);
+    console.log(
+        "EMAIL PASSWORD EXISTS:",
+        !!process.env.EMAIL_APP_PASSWORD
+    );
 
-        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
+    try {
 
-                <h2 style="margin-bottom: 10px;">
-                    HEEPIT Email Verification
-                </h2>
+        const info = await transporter.sendMail({
+            from: `"HEEPIT" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: "HEEPIT Email Verification OTP",
 
-                <p>
-                    Your verification OTP is:
-                </p>
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 20px;">
 
-                <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 20px 0;">
-                    ${otp}
+                    <h2>HEEPIT Email Verification</h2>
+
+                    <p>Your verification OTP is:</p>
+
+                    <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; margin: 20px 0;">
+                        ${otp}
+                    </div>
+
+                    <p>
+                        This OTP is valid for <b>5 minutes</b>.
+                    </p>
+
+                    <p style="color: #777;">
+                        If you did not request this OTP, please ignore this email.
+                    </p>
+
                 </div>
+            `
+        });
 
-                <p>
-                    This OTP is valid for <b>5 minutes</b>.
-                </p>
+        console.log("EMAIL SENT:", info.messageId);
 
-                <p style="color: #777;">
-                    If you did not request this OTP, please ignore this email.
-                </p>
+        return info;
 
-            </div>
-        `
-    });
+    } catch (err) {
+
+        console.error("EMAIL SEND ERROR:", err);
+
+        throw err;
+
+    }
 }
 
 module.exports = {
