@@ -247,19 +247,56 @@ exports.sendEmailOtp = async (req, res) => {
         );
 
         // Save OTP
-        await db.query(
+        // ===============================
+        // SAVE EMAIL OTP
+        // ===============================
+
+        const [otpResult] = await db.query(
             `
-            UPDATE User_OTP_Aerodeck
-            SET email_otp = ?,
-                email_otp_expires_at = ?
-            WHERE user_id = ?
-            `,
+    UPDATE User_OTP_Aerodeck
+    SET email_otp = ?,
+        email_otp_expires_at = ?
+    WHERE user_id = ?
+    `,
             [
                 otp,
                 expiresAt,
                 user_id
             ]
         );
+
+        if (otpResult.affectedRows === 0) {
+
+            // OTP row does not exist → create it
+            await db.query(
+                `
+        INSERT INTO User_OTP_Aerodeck
+        (
+            user_id,
+            email_otp,
+            email_otp_expires_at
+        )
+        VALUES (?, ?, ?)
+        `,
+                [
+                    user_id,
+                    otp,
+                    expiresAt
+                ]
+            );
+
+            console.log(
+                "EMAIL OTP ROW CREATED:",
+                user_id
+            );
+
+        } else {
+
+            console.log(
+                "EMAIL OTP UPDATED:",
+                user_id
+            );
+        }
 
         // Send email
         const { sendEmailOtp } = require("../../services/emailService");
