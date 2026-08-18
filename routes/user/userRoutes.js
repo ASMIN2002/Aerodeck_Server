@@ -27,4 +27,21 @@ router.post(
     userController.getWhatsAppOrderData
 );
 
+// ===============================
+// SEND EMAIL OTP
+// ===============================
+router.post(
+    "/send-email-otp",
+    userController.sendEmailOtp
+);
+
+
+// ===============================
+// VERIFY EMAIL OTP
+// ===============================
+router.post(
+    "/verify-email-otp",
+    userController.verifyEmailOtp
+);
+
 module.exports = router;
