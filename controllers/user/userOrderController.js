@@ -736,7 +736,7 @@ exports.cancelOrder = async (req, res) => {
     try {
 
         const {
-            order_id,
+            order_item_id,
             product_id,
             user_id,
             product_category,
@@ -767,21 +767,21 @@ exports.cancelOrder = async (req, res) => {
         await pool.query(
 
             `INSERT INTO Cancel_Aerodeck
-            (
-                order_id,
-                product_id,
-                user_id,
-                product_category,
-                quantity,
-                cancel_reason,
-                order_date,
-                payment_status,
-                cancel_status
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+(
+    order_item_id,
+    product_id,
+    user_id,
+    product_category,
+    quantity,
+    cancel_reason,
+    order_date,
+    payment_status,
+    cancel_status
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
-                order_id,
+                order_item_id,
                 product_id,
                 user_id,
                 product_category,
@@ -797,13 +797,9 @@ exports.cancelOrder = async (req, res) => {
 
         await pool.query(
             `UPDATE Order_Items_Aerodeck
-     SET order_status = 'REQUESTED'
-     WHERE order_id = ?
-     AND product_id = ?`,
-            [
-                order_id,
-                product_id
-            ]
+SET order_status = 'REQUESTED'
+WHERE order_item_id = ?`,
+            [order_item_id]
         );
 
         res.json({
@@ -831,15 +827,14 @@ exports.cancelOrder = async (req, res) => {
 };
 exports.getCancelStatus = async (req, res) => {
 
-    const { order_id, product_id } = req.query;
+    const { order_item_id } = req.query;
 
     const [rows] = await pool.query(
         `SELECT cancel_status
-         FROM Cancel_Aerodeck
-         WHERE order_id = ?
-         AND product_id = ?
-         LIMIT 1`,
-        [order_id, product_id]
+FROM Cancel_Aerodeck
+WHERE order_item_id = ?
+LIMIT 1`,
+        [order_item_id]
     );
 
     res.json({

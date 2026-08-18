@@ -33,9 +33,11 @@ const userAddressRoutes = require("./routes/user/userAddressRoutes");
 const userOrderRoutes = require("./routes/user/userOrderRoutes");
 const UserPaymentRoute = require("./routes/user/UserPaymentRoute");
 const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
+const userRewardsRoutes = require("./routes/user/userRewardsRoutes");
 const userRoutes = require("./routes/user/userRoutes");
 const reviewRoutes = require("./routes/user/reviewRoutes");
 const smsRoutes = require("./routes/smsRoutes");
+
 
 
 
@@ -210,9 +212,11 @@ app.use("/api/user", userAddressRoutes);
 app.use("/api/user/orders", userOrderRoutes);
 app.use("/api/user/payment", UserPaymentRoute);
 app.use("/api/user/invoice", userInvoiceRoutes);
+app.use("/api/user/rewards", userRewardsRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
 app.use("/api/sms", smsRoutes);
+
 
 
 
