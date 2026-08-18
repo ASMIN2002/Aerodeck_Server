@@ -420,17 +420,6 @@ exports.verifyEmailOtp = async (req, res) => {
             ]
         );
 
-        // Clear OTP
-        await db.query(
-            `
-            UPDATE User_OTP_Aerodeck
-            SET email_otp = NULL,
-                email_otp_expires_at = NULL
-            WHERE user_id = ?
-            `,
-            [user_id]
-        );
-
         // Return updated profile
         const [updatedRows] = await db.query(
             `
