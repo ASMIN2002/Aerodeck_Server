@@ -52,6 +52,14 @@ async function sendEmailOtp(email, otp) {
             `
         });
 
+        transporter.verify((error, success) => {
+            if (error) {
+                console.error("SMTP VERIFY ERROR:", error);
+            } else {
+                console.log("SMTP SERVER READY");
+            }
+        });
+
         console.log("EMAIL SENT:", info.messageId);
 
         return info;
