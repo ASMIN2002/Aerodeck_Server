@@ -318,6 +318,62 @@ app.get("/user/app-version/:userId", async (req, res) => {
         });
     }
 });
+app.get("/user/check-update/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // User ke DownloadApp table se installed version
+        const [userRows] = await pool.query(
+            `SELECT update_version
+             FROM DownloadApp
+             WHERE user_id = ?
+             LIMIT 1`,
+            [userId]
+        );
+
+        if (!userRows.length) {
+            return res.status(404).json({
+                success: false,
+                error: "User app version not found"
+            });
+        }
+
+        // Latest available version
+        const [latestRows] = await pool.query(
+            `SELECT version
+             FROM aerodeck_versions
+             ORDER BY id DESC
+             LIMIT 1`
+        );
+
+        if (!latestRows.length) {
+            return res.status(404).json({
+                success: false,
+                error: "Latest app version not found"
+            });
+        }
+
+        const userVersion = String(userRows[0].update_version);
+        const latestVersion = String(latestRows[0].version);
+
+        const updateAvailable = userVersion !== latestVersion;
+
+        res.json({
+            success: true,
+            update_available: updateAvailable,
+            user_version: userVersion,
+            latest_version: latestVersion
+        });
+
+    } catch (err) {
+        console.error("CHECK UPDATE ERROR:", err);
+
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
 
 app.get("/api/founder/profile", async (req, res) => {
 
