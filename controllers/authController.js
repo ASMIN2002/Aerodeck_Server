@@ -217,7 +217,31 @@ exports.verifyRegisterOtp = async (req, res) => {
 
         const userId = result.insertId;
 
-        // Remove pending OTP after successful registration
+        const [versionRows] = await pool.query(
+            `SELECT version
+     FROM aerodeck_versions
+     ORDER BY id DESC
+     LIMIT 1`
+        );
+
+        console.log("VERSION ROWS:", versionRows);
+
+        const currentVersion = versionRows[0]?.version;
+
+        console.log("CURRENT APP VERSION:", currentVersion);
+
+        if (!currentVersion) {
+            throw new Error("Latest app version not found.");
+        }
+
+        const [downloadResult] = await pool.query(
+            `INSERT INTO DownloadApp
+    (user_id, update_version)
+    VALUES (?, ?)`,
+            [userId, currentVersion]
+        );
+
+        console.log("DownloadApp INSERT RESULT:", downloadResult);
         pendingRegistrations.delete(mobile_number);
 
         // Create session
