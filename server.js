@@ -376,6 +376,50 @@ app.get("/user/check-update/:userId", async (req, res) => {
         });
     }
 });
+app.put("/user/update-app-version/:userId", async (req, res) => {
+    try {
+
+        const { userId } = req.params;
+
+        const [latestRows] = await pool.query(
+            `SELECT version
+             FROM aerodeck_versions
+             ORDER BY id DESC
+             LIMIT 1`
+        );
+
+        if (!latestRows.length) {
+            return res.status(404).json({
+                success: false,
+                error: "Latest app version not found"
+            });
+        }
+
+        const latestVersion = String(latestRows[0].version);
+
+        const [result] = await pool.query(
+            `UPDATE DownloadApp
+             SET update_version = ?
+             WHERE user_id = ?`,
+            [latestVersion, userId]
+        );
+
+        res.json({
+            success: true,
+            user_id: userId,
+            version: latestVersion
+        });
+
+    } catch (err) {
+
+        console.error("UPDATE USER APP VERSION ERROR:", err);
+
+        res.status(500).json({
+            success: false,
+            error: err.message
+        });
+    }
+});
 app.get("/api/founder/profile", async (req, res) => {
 
     try {
