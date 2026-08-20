@@ -322,7 +322,7 @@ app.get("/user/check-update/:userId", async (req, res) => {
     try {
         const { userId } = req.params;
 
-        // User ke DownloadApp table se installed version
+        // User ki currently installed version
         const [userRows] = await pool.query(
             `SELECT update_version
              FROM DownloadApp
@@ -338,7 +338,7 @@ app.get("/user/check-update/:userId", async (req, res) => {
             });
         }
 
-        // Latest available version
+        // aerodeck_versions ki latest/top version
         const [latestRows] = await pool.query(
             `SELECT version
              FROM aerodeck_versions
@@ -356,6 +356,8 @@ app.get("/user/check-update/:userId", async (req, res) => {
         const userVersion = String(userRows[0].update_version);
         const latestVersion = String(latestRows[0].version);
 
+        // Match = no update
+        // Different = update available
         const updateAvailable = userVersion !== latestVersion;
 
         res.json({
@@ -374,7 +376,6 @@ app.get("/user/check-update/:userId", async (req, res) => {
         });
     }
 });
-
 app.get("/api/founder/profile", async (req, res) => {
 
     try {
