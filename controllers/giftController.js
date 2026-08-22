@@ -26,6 +26,7 @@ const addGift = async (req, res) => {
         const {
 
             gift_name,
+            gift_category,
             gift_description,
             gift_demo_price,
             gift_discount_percentage,
@@ -39,11 +40,13 @@ const addGift = async (req, res) => {
 
         } = req.body;
 
+
         const [result] = await db.query(
 
             `INSERT INTO Gifts_Aerodeck (
 
                 gift_name,
+                gift_category,
                 gift_description,
                 gift_demo_price,
                 gift_discount_percentage,
@@ -57,11 +60,12 @@ const addGift = async (req, res) => {
                 gift_rating,
                 gift_status
 
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
 
                 gift_name,
+                gift_category,
                 gift_description,
                 gift_demo_price,
                 gift_discount_percentage,
@@ -78,17 +82,21 @@ const addGift = async (req, res) => {
             ]
 
         );
+
+
         const giftId = `G${result.insertId}`;
+
 
         await db.query(
 
             `UPDATE Gifts_Aerodeck
-     SET gift_id = ?
-     WHERE id = ?`,
+             SET gift_id = ?
+             WHERE id = ?`,
 
             [giftId, result.insertId]
 
         );
+
 
         return res.json({
 
@@ -143,6 +151,7 @@ const updateGift = async (req, res) => {
 
             gift_id,
             gift_name,
+            gift_category,
             gift_description,
             gift_demo_price,
             gift_discount_percentage,
@@ -162,6 +171,7 @@ const updateGift = async (req, res) => {
 
         } = req.body;
 
+
         const gift_price = (
 
             Number(gift_demo_price)
@@ -169,50 +179,52 @@ const updateGift = async (req, res) => {
             -
 
             (
-
                 Number(gift_demo_price)
-
                 *
-
                 Number(gift_discount_percentage)
-
             ) / 100
 
         ).toFixed(2);
 
+
         await db.query(
 
             `UPDATE Gifts_Aerodeck
-SET
-    gift_name = ?,
-    gift_description = ?,
-    gift_demo_price = ?,
-    gift_discount_percentage = ?,
-    gift_highlight_text = ?,
-    gift_price = ?,
-    gift_image1 = ?,
-gift_image1_public_id = ?,
+             SET
+                gift_name = ?,
+                gift_category = ?,
+                gift_description = ?,
+                gift_demo_price = ?,
+                gift_discount_percentage = ?,
+                gift_highlight_text = ?,
+                gift_price = ?,
 
-gift_image2 = ?,
-gift_image2_public_id = ?,
+                gift_image1 = ?,
+                gift_image1_public_id = ?,
 
-gift_image3 = ?,
-gift_image3_public_id = ?,
+                gift_image2 = ?,
+                gift_image2_public_id = ?,
 
-gift_image4 = ?,
-gift_image4_public_id = ?,
+                gift_image3 = ?,
+                gift_image3_public_id = ?,
 
-gift_status = ?
-WHERE gift_id = ?`,
+                gift_image4 = ?,
+                gift_image4_public_id = ?,
+
+                gift_status = ?
+
+             WHERE gift_id = ?`,
 
             [
 
                 gift_name,
+                gift_category,
                 gift_description,
                 gift_demo_price,
                 gift_discount_percentage,
                 gift_highlight_text,
                 gift_price,
+
                 gift_image1,
                 gift_image1_public_id,
 
@@ -228,10 +240,10 @@ WHERE gift_id = ?`,
                 gift_status,
                 gift_id
 
-
             ]
 
         );
+
 
         return res.json({
 

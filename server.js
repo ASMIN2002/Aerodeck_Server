@@ -10,6 +10,7 @@ const productsRoutes = require("./routes/products");
 const founderRoutes = require("./routes/founderRoutes");
 const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
+const categoryRoutes = require("./routes/CategoryRoutes");
 const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
 const founderOrderRoutes = require("./routes/founderOrderRoutes");
@@ -194,6 +195,7 @@ app.use("/api", productsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/gifts", giftRoutes);
 app.use("/api/premium", premiumRoutes);
+app.use("/api/category", categoryRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/founder/orders", founderOrderRoutes);
 
@@ -376,6 +378,7 @@ app.get("/user/check-update/:userId", async (req, res) => {
         });
     }
 });
+
 app.put("/user/update-app-version/:userId", async (req, res) => {
     try {
 

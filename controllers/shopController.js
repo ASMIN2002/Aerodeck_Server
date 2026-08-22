@@ -26,6 +26,7 @@ const addShop = async (req, res) => {
         const {
 
             shop_name,
+            shop_category,
             shop_description,
             shop_demo_price,
             shop_discount_percentage,
@@ -39,11 +40,13 @@ const addShop = async (req, res) => {
 
         } = req.body;
 
+
         const [result] = await db.query(
 
             `INSERT INTO Shop_Aerodeck (
 
                 shop_name,
+                shop_category,
                 shop_description,
                 shop_demo_price,
                 shop_discount_percentage,
@@ -57,11 +60,12 @@ const addShop = async (req, res) => {
                 shop_rating,
                 shop_status
 
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
 
                 shop_name,
+                shop_category,
                 shop_description,
                 shop_demo_price,
                 shop_discount_percentage,
@@ -78,17 +82,21 @@ const addShop = async (req, res) => {
             ]
 
         );
+
+
         const shopId = `S${result.insertId}`;
+
 
         await db.query(
 
             `UPDATE Shop_Aerodeck
-     SET shop_id = ?
-     WHERE id = ?`,
+             SET shop_id = ?
+             WHERE id = ?`,
 
             [shopId, result.insertId]
 
         );
+
 
         return res.json({
 
@@ -143,6 +151,7 @@ const updateShop = async (req, res) => {
 
             shop_id,
             shop_name,
+            shop_category,
             shop_description,
             shop_demo_price,
             shop_discount_percentage,
@@ -162,6 +171,7 @@ const updateShop = async (req, res) => {
 
         } = req.body;
 
+
         const shop_price = (
 
             Number(shop_demo_price)
@@ -169,50 +179,52 @@ const updateShop = async (req, res) => {
             -
 
             (
-
                 Number(shop_demo_price)
-
                 *
-
                 Number(shop_discount_percentage)
-
             ) / 100
 
         ).toFixed(2);
 
+
         await db.query(
 
             `UPDATE Shop_Aerodeck
-SET
-    shop_name = ?,
-    shop_description = ?,
-    shop_demo_price = ?,
-    shop_discount_percentage = ?,
-    shop_highlight_text = ?,
-    shop_price = ?,
-    shop_image1 = ?,
-shop_image1_public_id = ?,
+             SET
+                shop_name = ?,
+                shop_category = ?,
+                shop_description = ?,
+                shop_demo_price = ?,
+                shop_discount_percentage = ?,
+                shop_highlight_text = ?,
+                shop_price = ?,
 
-shop_image2 = ?,
-shop_image2_public_id = ?,
+                shop_image1 = ?,
+                shop_image1_public_id = ?,
 
-shop_image3 = ?,
-shop_image3_public_id = ?,
+                shop_image2 = ?,
+                shop_image2_public_id = ?,
 
-shop_image4 = ?,
-shop_image4_public_id = ?,
+                shop_image3 = ?,
+                shop_image3_public_id = ?,
 
-shop_status = ?
-WHERE shop_id = ?`,
+                shop_image4 = ?,
+                shop_image4_public_id = ?,
+
+                shop_status = ?
+
+             WHERE shop_id = ?`,
 
             [
 
                 shop_name,
+                shop_category,
                 shop_description,
                 shop_demo_price,
                 shop_discount_percentage,
                 shop_highlight_text,
                 shop_price,
+
                 shop_image1,
                 shop_image1_public_id,
 
@@ -228,10 +240,10 @@ WHERE shop_id = ?`,
                 shop_status,
                 shop_id
 
-
             ]
 
         );
+
 
         return res.json({
 
@@ -256,7 +268,6 @@ WHERE shop_id = ?`,
     }
 
 };
-
 const deleteShop = async (req, res) => {
 
     try {
