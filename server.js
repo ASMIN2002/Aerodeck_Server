@@ -171,7 +171,8 @@ const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "https://localhost",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "https://heepit.netlify.app"
 ];
 
 app.use(cors({
@@ -179,11 +180,16 @@ app.use(cors({
         if (!origin || allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
+
+        console.log("CORS blocked:", origin);
+
         return callback(new Error("Not allowed by CORS"));
     },
     credentials: true
 }));
+
 app.use(express.json());
+
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
