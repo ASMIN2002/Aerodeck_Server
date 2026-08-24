@@ -20,7 +20,6 @@ function getPublicId(url) {
   return publicId;
 
 }
-
 exports.uploadProfile = async (req, res) => {
 
   try {
@@ -281,7 +280,6 @@ exports.uploadProduct = async (req, res) => {
   }
 
 };
-
 exports.uploadGift = async (req, res) => {
 
   try {
@@ -385,10 +383,6 @@ exports.uploadGift = async (req, res) => {
       stream.end(req.file.buffer);
 
     });
-    console.log("PUBLIC ID:", result.public_id);
-    console.log("OVERWRITE RESULT:", result);
-    console.log("URL:", result.secure_url);
-
     return res.json({
       success: true,
       url: result.secure_url,
@@ -412,7 +406,6 @@ exports.uploadGift = async (req, res) => {
   }
 
 };
-
 exports.uploadPremium = async (req, res) => {
 
   try {
@@ -515,11 +508,6 @@ exports.uploadPremium = async (req, res) => {
       stream.end(req.file.buffer);
 
     });
-
-    console.log("PUBLIC ID:", result.public_id);
-    console.log("OVERWRITE RESULT:", result);
-    console.log("URL:", result.secure_url);
-
     return res.json({
 
       success: true,
@@ -647,10 +635,6 @@ exports.uploadShop = async (req, res) => {
       stream.end(req.file.buffer);
 
     });
-
-    console.log("PUBLIC ID:", result.public_id);
-    console.log("OVERWRITE RESULT:", result);
-    console.log("URL:", result.secure_url);
 
     return res.json({
 
@@ -912,8 +896,6 @@ exports.deleteReviewImage = async (req, res) => {
   }
 
 };
-
-// USER
 exports.uploadUserProfile = async (req, res) => {
 
   try {
@@ -1143,4 +1125,3 @@ exports.removeUserProfile = async (req, res) => {
   }
 
 };
-
