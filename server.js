@@ -15,6 +15,7 @@ const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
 const founderOrderRoutes = require("./routes/founderOrderRoutes");
 const heepitAppsRoutes = require("./routes/heepitAppsRoutes");
+const detailsRoutes = require("./routes/detailsRoutes");
 
 
 // SECURITY
@@ -206,6 +207,7 @@ app.use("/api/category", categoryRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/founder/orders", founderOrderRoutes);
 app.use("/api", heepitAppsRoutes);
+app.use("/api", detailsRoutes);
 
 
 

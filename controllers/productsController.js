@@ -273,6 +273,12 @@ const updateProduct = async (req, res) => {
             product_image2_public_id,
             product_image3_public_id,
             product_image4_public_id,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link,
 
             product_status
 
@@ -346,6 +352,32 @@ WHERE product_id = ?`,
                 product_status,
                 product_id
 
+
+            ]
+
+        );
+
+        await db.query(
+
+            `UPDATE User_Product_Detail
+     SET
+        material = ?,
+        size = ?,
+        printing = ?,
+        delivery = ?,
+        return_days = ?,
+        video_link = ?
+     WHERE product_id = ?`,
+
+            [
+
+                material,
+                size,
+                printing,
+                delivery,
+                return_days === "" ? null : return_days,
+                video_link,
+                String(product_id)
 
             ]
 

@@ -36,7 +36,13 @@ const addShop = async (req, res) => {
             shop_image2,
             shop_image3,
             shop_image4,
-            shop_status
+            shop_status,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link
 
         } = req.body;
 
@@ -94,6 +100,37 @@ const addShop = async (req, res) => {
              WHERE id = ?`,
 
             [shopId, result.insertId]
+
+        );
+
+
+        await db.query(
+
+            `INSERT INTO User_Product_Detail (
+
+                product_id,
+                category,
+                material,
+                size,
+                printing,
+                delivery,
+                return_days,
+                video_link
+
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
+            [
+
+                shopId,
+                shop_category,
+                material,
+                size,
+                printing,
+                delivery,
+                return_days,
+                video_link
+
+            ]
 
         );
 
@@ -166,7 +203,12 @@ const updateShop = async (req, res) => {
             shop_image2_public_id,
             shop_image3_public_id,
             shop_image4_public_id,
-
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link,
             shop_status
 
         } = req.body;
@@ -239,6 +281,32 @@ const updateShop = async (req, res) => {
 
                 shop_status,
                 shop_id
+
+            ]
+
+        );
+
+        await db.query(
+
+            `UPDATE User_Product_Detail
+     SET
+        material = ?,
+        size = ?,
+        printing = ?,
+        delivery = ?,
+        return_days = ?,
+        video_link = ?
+     WHERE product_id = ?`,
+
+            [
+
+                material || "",
+                size || "",
+                printing || "",
+                delivery || "",
+                return_days === "" ? null : return_days,
+                video_link || "",
+                String(shop_id)
 
             ]
 

@@ -1,4 +1,4 @@
-const db = require("../../config/db");
+const db = require("../config/db");
 
 const getDetails = async (req, res) => {
 
@@ -11,24 +11,24 @@ const getDetails = async (req, res) => {
 
         switch (type.toLowerCase()) {
 
-            case "gift":
-                table = "Gifts_Aerodeck";
-                idColumn = "gift_id";
-                break;
-
-            case "premium":
-                table = "Premium_Aerodeck";
-                idColumn = "premium_id";
-                break;
-
             case "card":
                 table = "Products_Aerodeck";
                 idColumn = "product_id";
                 break;
 
+            case "gift":
+                table = "Gifts_Aerodeck";
+                idColumn = "gift_id";
+                break;
+
             case "shop":
                 table = "Shop_Aerodeck";
                 idColumn = "shop_id";
+                break;
+
+            case "premium":
+                table = "Premium_Aerodeck";
+                idColumn = "premium_id";
                 break;
 
             default:
@@ -39,31 +39,18 @@ const getDetails = async (req, res) => {
 
         }
 
+
         const [rows] = await db.query(
 
-            `SELECT * FROM ${table} WHERE ${idColumn} = ? LIMIT 1`,
+            `SELECT * FROM ${table} 
+             WHERE ${idColumn} = ? 
+             LIMIT 1`,
+
             [id]
 
         );
-        let productDetail = null;
 
-        if (
-            type.toLowerCase() === "card" ||
-            type.toLowerCase() === "gift" ||
-            type.toLowerCase() === "shop"
-        ) {
 
-            const [detailRows] = await db.query(
-                `SELECT * FROM User_Product_Detail
-         WHERE product_id = ?
-         LIMIT 1`,
-                [id]
-            );
-
-            productDetail = detailRows.length
-                ? detailRows[0]
-                : null;
-        }
         if (rows.length === 0) {
 
             return res.status(404).json({
@@ -73,26 +60,52 @@ const getDetails = async (req, res) => {
 
         }
 
-        res.json({
+
+        const [detailRows] = await db.query(
+
+            `SELECT * FROM User_Product_Detail
+             WHERE product_id = ?
+             LIMIT 1`,
+
+            [String(id)]
+
+        );
+
+
+        return res.json({
+
             success: true,
+
             data: {
+
                 ...rows[0],
-                productDetail
+
+                productDetail:
+                    detailRows.length
+                        ? detailRows[0]
+                        : null
+
             }
+
         });
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error(error);
 
-        res.status(500).json({
+        return res.status(500).json({
+
             success: false,
             message: "Server Error"
+
         });
 
     }
 
 };
+
 
 module.exports = {
     getDetails

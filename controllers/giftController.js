@@ -36,7 +36,15 @@ const addGift = async (req, res) => {
             gift_image2,
             gift_image3,
             gift_image4,
-            gift_status
+            gift_status,
+
+            // EXTRA DETAILS
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link
 
         } = req.body;
 
@@ -98,6 +106,34 @@ const addGift = async (req, res) => {
         );
 
 
+        // =========================
+        // SAVE EXTRA GIFT DETAILS
+        // =========================
+
+        await db.query(
+            `INSERT INTO User_Product_Detail (
+        product_id,
+        category,
+        material,
+        size,
+        printing,
+        delivery,
+        return_days,
+        video_link
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                giftId,
+                gift_category,
+                material || "",
+                size || "",
+                printing || "",
+                delivery || "",
+                return_days || null,
+                video_link || ""
+            ]
+        );
+
+
         return res.json({
 
             success: true,
@@ -121,7 +157,6 @@ const addGift = async (req, res) => {
     }
 
 };
-
 
 const getGifts = async (req, res) => {
 
@@ -166,6 +201,12 @@ const updateGift = async (req, res) => {
             gift_image2_public_id,
             gift_image3_public_id,
             gift_image4_public_id,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link,
 
             gift_status
 
@@ -243,7 +284,31 @@ const updateGift = async (req, res) => {
             ]
 
         );
+        await db.query(
 
+            `UPDATE User_Product_Detail
+     SET
+        material = ?,
+        size = ?,
+        printing = ?,
+        delivery = ?,
+        return_days = ?,
+        video_link = ?
+     WHERE product_id = ?`,
+
+            [
+
+                material || "",
+                size || "",
+                printing || "",
+                delivery || "",
+                return_days === "" ? null : return_days,
+                video_link || "",
+                String(gift_id)
+
+            ]
+
+        );
 
         return res.json({
 

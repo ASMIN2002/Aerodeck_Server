@@ -251,9 +251,6 @@ exports.uploadProduct = async (req, res) => {
       stream.end(req.file.buffer);
 
     });
-    console.log("PUBLIC ID:", result.public_id);
-    console.log("OVERWRITE RESULT:", result);
-    console.log("URL:", result.secure_url);
 
     return res.json({
 

@@ -9,7 +9,7 @@ const {
     updateProduct,
     deleteProduct,
     updateOfferStatus,
-    deleteOffer
+    deleteOffer,
 } = require("../controllers/productsController");
 
 router.get("/products", getProducts);
