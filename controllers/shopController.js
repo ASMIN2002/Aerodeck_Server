@@ -285,21 +285,22 @@ const updateShop = async (req, res) => {
             ]
 
         );
-
-        await db.query(
+        const [detailResult] = await db.query(
 
             `UPDATE User_Product_Detail
-     SET
-        material = ?,
-        size = ?,
-        printing = ?,
-        delivery = ?,
-        return_days = ?,
-        video_link = ?
-     WHERE product_id = ?`,
+SET
+    category = ?,
+    material = ?,
+    size = ?,
+    printing = ?,
+    delivery = ?,
+    return_days = ?,
+    video_link = ?
+WHERE product_id = ?`,
 
             [
 
+                shop_category || "",
                 material || "",
                 size || "",
                 printing || "",
@@ -312,6 +313,39 @@ const updateShop = async (req, res) => {
 
         );
 
+        if (detailResult.affectedRows === 0) {
+
+            await db.query(
+
+                `INSERT INTO User_Product_Detail
+        (
+            product_id,
+            category,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
+                [
+
+                    String(shop_id),
+                    shop_category || "",
+                    material || "",
+                    size || "",
+                    printing || "",
+                    delivery || "",
+                    return_days === "" ? null : return_days,
+                    video_link || ""
+
+                ]
+
+            );
+
+        }
 
         return res.json({
 

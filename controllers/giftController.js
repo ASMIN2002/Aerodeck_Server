@@ -310,6 +310,39 @@ const updateGift = async (req, res) => {
 
         );
 
+
+        if (detailResult.affectedRows === 0) {
+
+            await db.query(
+
+                `INSERT INTO User_Product_Detail
+        (
+            product_id,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            video_link
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
+                [
+
+                    String(gift_id),
+                    material || "",
+                    size || "",
+                    printing || "",
+                    delivery || "",
+                    return_days === "" ? null : return_days,
+                    video_link || ""
+
+                ]
+
+            );
+
+        }
+
         return res.json({
 
             success: true,

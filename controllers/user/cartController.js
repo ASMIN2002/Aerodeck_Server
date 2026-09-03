@@ -133,6 +133,22 @@ exports.getCart = async (req, res) => {
 
             if (item) {
 
+                const [detailRows] = await pool.query(
+
+                    `SELECT delivery
+         FROM User_Product_Detail
+         WHERE product_id = ?`,
+
+                    [id]
+
+                );
+
+                if (detailRows.length > 0) {
+
+                    item.delivery = detailRows[0].delivery;
+
+                }
+
                 finalCart.push({
 
                     ...item,
