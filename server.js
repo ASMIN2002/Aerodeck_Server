@@ -389,49 +389,96 @@ app.get("/user/check-update/:userId", async (req, res) => {
     }
 });
 
-app.put("/user/update-app-version/:userId", async (req, res) => {
+app.get("/user/app-version/:userId", async (req, res) => {
+
     try {
 
         const { userId } = req.params;
 
-        const [latestRows] = await pool.query(
-            `SELECT version
-             FROM aerodeck_versions
-             ORDER BY id DESC
-             LIMIT 1`
+        const [rows] = await pool.query(
+            `SELECT update_version
+             FROM DownloadApp
+             WHERE user_id = ?
+             LIMIT 1`,
+            [userId]
         );
 
-        if (!latestRows.length) {
+        if (!rows.length) {
+
             return res.status(404).json({
                 success: false,
-                error: "Latest app version not found"
+                message: "User version not found"
             });
+
         }
 
-        const latestVersion = String(latestRows[0].version);
+        return res.json({
+            success: true,
+            version: String(rows[0].update_version)
+        });
 
-        const [result] = await pool.query(
+    } catch (error) {
+
+        console.error(
+            "GET APP VERSION ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to get version"
+        });
+
+    }
+
+});
+
+app.put("/user/update-app-version/:userId", async (req, res) => {
+
+    try {
+
+        const { userId } = req.params;
+        const { version } = req.body;
+
+        if (!version) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Installed app version is required"
+            });
+
+        }
+
+        await pool.query(
             `UPDATE DownloadApp
              SET update_version = ?
              WHERE user_id = ?`,
-            [latestVersion, userId]
+            [
+                String(version),
+                userId
+            ]
         );
 
-        res.json({
+        return res.json({
             success: true,
-            user_id: userId,
-            version: latestVersion
+            message: "Installed app version updated",
+            version: String(version)
         });
 
-    } catch (err) {
+    } catch (error) {
 
-        console.error("UPDATE USER APP VERSION ERROR:", err);
+        console.error(
+            "UPDATE APP VERSION ERROR:",
+            error
+        );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            error: err.message
+            message: "Failed to update app version"
         });
+
     }
+
 });
 app.get("/api/founder/profile", async (req, res) => {
 
