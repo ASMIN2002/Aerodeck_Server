@@ -456,6 +456,44 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
     }
 
 });
+app.get("/api/app/latest-version", async (req, res) => {
+
+    try {
+
+        const [rows] = await pool.query(
+            `SELECT version
+             FROM aerodeck_versions
+             ORDER BY id DESC
+             LIMIT 1`
+        );
+
+        if (!rows.length) {
+
+            return res.status(404).json({
+                success: false,
+                message: "No version found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            version: String(rows[0].version)
+        });
+
+    } catch (error) {
+
+        console.error(
+            "LATEST VERSION ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch latest version"
+        });
+    }
+
+});
 app.get("/api/founder/profile", async (req, res) => {
 
     try {
