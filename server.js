@@ -389,13 +389,17 @@ app.get("/user/check-update/:userId", async (req, res) => {
     }
 });
 
-
 app.put("/user/update-app-version/:userId", async (req, res) => {
 
     try {
 
         const { userId } = req.params;
         const { version } = req.body;
+
+        console.log("UPDATE VERSION REQUEST:", {
+            userId,
+            version
+        });
 
         if (!version) {
 
@@ -406,7 +410,7 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
 
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `UPDATE DownloadApp
              SET update_version = ?
              WHERE user_id = ?`,
@@ -415,6 +419,21 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
                 userId
             ]
         );
+
+        console.log("VERSION UPDATE RESULT:", {
+            userId,
+            version,
+            affectedRows: result.affectedRows
+        });
+
+        if (result.affectedRows === 0) {
+
+            return res.status(404).json({
+                success: false,
+                message: "User not found in DownloadApp"
+            });
+
+        }
 
         return res.json({
             success: true,
