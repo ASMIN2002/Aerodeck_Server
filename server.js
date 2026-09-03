@@ -389,49 +389,6 @@ app.get("/user/check-update/:userId", async (req, res) => {
     }
 });
 
-app.get("/user/app-version/:userId", async (req, res) => {
-
-    try {
-
-        const { userId } = req.params;
-
-        const [rows] = await pool.query(
-            `SELECT update_version
-             FROM DownloadApp
-             WHERE user_id = ?
-             LIMIT 1`,
-            [userId]
-        );
-
-        if (!rows.length) {
-
-            return res.status(404).json({
-                success: false,
-                message: "User version not found"
-            });
-
-        }
-
-        return res.json({
-            success: true,
-            version: String(rows[0].update_version)
-        });
-
-    } catch (error) {
-
-        console.error(
-            "GET APP VERSION ERROR:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to get version"
-        });
-
-    }
-
-});
 
 app.put("/user/update-app-version/:userId", async (req, res) => {
 
