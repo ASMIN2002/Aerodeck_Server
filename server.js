@@ -396,10 +396,6 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
         const { userId } = req.params;
         const { version } = req.body;
 
-        console.log("UPDATE VERSION REQUEST:", {
-            userId,
-            version
-        });
 
         if (!version) {
 
@@ -420,11 +416,6 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
             ]
         );
 
-        console.log("VERSION UPDATE RESULT:", {
-            userId,
-            version,
-            affectedRows: result.affectedRows
-        });
 
         if (result.affectedRows === 0) {
 
