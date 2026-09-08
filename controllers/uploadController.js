@@ -894,9 +894,7 @@ exports.deleteReviewImage = async (req, res) => {
 
 };
 exports.uploadUserProfile = async (req, res) => {
-
   try {
-
     const { session_token } = req.body;
 
     const user_id = await getUserIdFromSession(session_token);
@@ -908,13 +906,6 @@ exports.uploadUserProfile = async (req, res) => {
       });
     }
 
-    if (!user_id) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required."
-      });
-    }
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -922,53 +913,24 @@ exports.uploadUserProfile = async (req, res) => {
       });
     }
 
-    // Get current profile image
     const [rows] = await db.query(
-
-      `SELECT
-                profile_image,
-                profile_image_id
-             FROM User_Aerodeck
-             WHERE user_id=?`,
-
+      `SELECT user_id
+       FROM User_Aerodeck
+       WHERE user_id=?`,
       [user_id]
-
     );
 
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
         success: false,
         message: "User not found."
       });
     }
 
-    // Delete old image
-    if (rows[0].profile_image_id) {
-
-      try {
-
-        await cloudinary.uploader.destroy(
-          rows[0].profile_image_id
-        );
-
-        console.log(
-          "OLD USER IMAGE DELETED:",
-          rows[0].profile_image_id
-        );
-
-      } catch (e) {
-
-        console.log("Old image delete skipped.");
-
-      }
-
-    }
-
-    // Upload new image
+    // Upload / overwrite directly
     const result = await new Promise((resolve, reject) => {
 
       const stream = cloudinary.uploader.upload_stream(
-
         {
           folder: "AERODECK/USERS",
           public_id: `user_${user_id}_profile`,
@@ -978,80 +940,57 @@ exports.uploadUserProfile = async (req, res) => {
         },
 
         (err, result) => {
-
           if (err) return reject(err);
-
           resolve(result);
-
         }
-
       );
 
       stream.end(req.file.buffer);
-
     });
 
-    // Update Database
-    const [updateResult] = await db.query(
-
+    // Save EXACT Cloudinary URL
+    await db.query(
       `UPDATE User_Aerodeck
-             SET
-                profile_image=?,
-                profile_image_id=?
-             WHERE user_id=?`,
-
+       SET profile_image=?,
+           profile_image_id=?
+       WHERE user_id=?`,
       [
         result.secure_url,
         result.public_id,
         user_id
       ]
-
     );
-    // Return updated user
+
     const [updated] = await db.query(
-
       `SELECT
-                user_id,
-                full_name,
-                mobile_number,
-                email,
-                profile_image,
-                profile_image_id,
-                is_mobile_verified,
-                is_email_verified
-             FROM User_Aerodeck
-             WHERE user_id=?`,
-
+          user_id,
+          full_name,
+          mobile_number,
+          email,
+          profile_image,
+          profile_image_id,
+          is_mobile_verified,
+          is_email_verified
+       FROM User_Aerodeck
+       WHERE user_id=?`,
       [user_id]
-
     );
 
     return res.json({
-
       success: true,
-
       message: "Profile image updated successfully.",
-
       user: updated[0]
-
     });
 
-  }
+  } catch (err) {
 
-  catch (err) {
-
-    console.error(err);
+    console.error("PROFILE UPLOAD ERROR:", err);
 
     return res.status(500).json({
-
       success: false,
-
       message: err.message
-
     });
-
   }
-
 };
 exports.removeUserProfile = async (req, res) => {
 
