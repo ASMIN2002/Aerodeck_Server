@@ -16,12 +16,11 @@ const shopRoutes = require("./routes/shopRoutes");
 const founderOrderRoutes = require("./routes/founderOrderRoutes");
 const heepitAppsRoutes = require("./routes/heepitAppsRoutes");
 const detailsRoutes = require("./routes/detailsRoutes");
-
+const openOfferRoutes = require("./routes/openOfferRoutes");
 
 // SECURITY
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-
 
 // USER
 const userProductRoutes = require("./routes/user/userProducts");
@@ -40,9 +39,6 @@ const userRoutes = require("./routes/user/userRoutes");
 const reviewRoutes = require("./routes/user/reviewRoutes");
 const smsRoutes = require("./routes/smsRoutes");
 
-
-
-
 const app = express();
 const httpServer = http.createServer(app);
 
@@ -53,7 +49,6 @@ const io = new Server(httpServer, {
 });
 app.set("io", io);
 io.on("connection", (socket) => {
-
     console.log(
         "SMS device connected:",
         socket.id
@@ -61,7 +56,6 @@ io.on("connection", (socket) => {
     socket.on("register_sms_device", async (data) => {
 
         try {
-
             const {
                 device_id,
                 device_token
@@ -83,7 +77,6 @@ io.on("connection", (socket) => {
             );
 
             if (rows.length === 0) {
-
                 socket.emit(
                     "sms_device_verified",
                     {
@@ -91,13 +84,10 @@ io.on("connection", (socket) => {
                         message: "Invalid SMS device."
                     }
                 );
-
                 return;
-
             }
 
             if (rows[0].is_active !== 1) {
-
                 socket.emit(
                     "sms_device_verified",
                     {
@@ -105,17 +95,11 @@ io.on("connection", (socket) => {
                         message: "SMS device is inactive."
                     }
                 );
-
                 return;
-
             }
-
             if (rows[0].is_primary === 1) {
-
                 socket.join("sms_primary");
-
             }
-
             socket.emit(
                 "sms_device_verified",
                 {
@@ -208,8 +192,7 @@ app.use("/api/shop", shopRoutes);
 app.use("/api/founder/orders", founderOrderRoutes);
 app.use("/api", heepitAppsRoutes);
 app.use("/api", detailsRoutes);
-
-
+app.use("/api/openoffers", openOfferRoutes);
 
 // USER
 app.use("/api/user", userProductRoutes);
@@ -227,10 +210,6 @@ app.use("/api/user/invoice", userInvoiceRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
 app.use("/api/sms", smsRoutes);
-
-
-
-
 app.get("/", (req, res) => {
 
     res.send("AERODECK SERVER RUNNING");
