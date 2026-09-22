@@ -1061,3 +1061,54 @@ exports.removeUserProfile = async (req, res) => {
   }
 
 };
+/* ============================================
+   VIDEO HERO UPLOAD
+   ============================================ */
+
+exports.uploadVideoHero = async (req, res) => {
+  try {
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No Video Selected"
+      });
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "AERODECK/VIDEO_HERO",
+          resource_type: "video"   /* ✅ Video ke liye zaroori */
+        },
+        (err, result) => {
+          if (err) {
+            console.error("Cloudinary Error:", err);
+            return reject(err);
+          }
+          resolve(result);
+        }
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    return res.json({
+      success: true,
+      url: result.secure_url,
+      public_id: result.public_id
+    });
+
+  } catch (err) {
+
+    console.error("VIDEO UPLOAD FAILED:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
+};

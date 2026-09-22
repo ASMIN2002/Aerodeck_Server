@@ -15,6 +15,7 @@ const {
     uploadShop,
     uploadReviewImage,
     deleteReviewImage,
+    uploadVideoHero
 } = require("../controllers/uploadController");
 
 router.post(
@@ -87,5 +88,12 @@ router.delete(
     deleteReviewImage
 
 );
+
+router.post(
+    "/video",
+    upload.single("video"),
+    uploadVideoHero
+);
+
 
 module.exports = router;

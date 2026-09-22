@@ -17,6 +17,7 @@ const founderOrderRoutes = require("./routes/founderOrderRoutes");
 const heepitAppsRoutes = require("./routes/heepitAppsRoutes");
 const detailsRoutes = require("./routes/detailsRoutes");
 const openOfferRoutes = require("./routes/openOfferRoutes");
+const videoheroRoutes = require("./routes/videoheroRoutes"); 
 
 // SECURITY
 const helmet = require("helmet");
@@ -193,6 +194,7 @@ app.use("/api/founder/orders", founderOrderRoutes);
 app.use("/api", heepitAppsRoutes);
 app.use("/api", detailsRoutes);
 app.use("/api/openoffers", openOfferRoutes);
+app.use("/api/videohero", videoheroRoutes); 
 
 // USER
 app.use("/api/user", userProductRoutes);
