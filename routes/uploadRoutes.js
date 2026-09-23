@@ -15,7 +15,8 @@ const {
     uploadShop,
     uploadReviewImage,
     deleteReviewImage,
-    uploadVideoHero
+    uploadVideoHero,
+    uploadShopVideo 
 } = require("../controllers/uploadController");
 
 router.post(
@@ -95,5 +96,11 @@ router.post(
     uploadVideoHero
 );
 
+
+router.post(
+    "/shop-video",
+    upload.single("video"),
+    uploadShopVideo
+);
 
 module.exports = router;

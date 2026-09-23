@@ -1112,3 +1112,66 @@ exports.uploadVideoHero = async (req, res) => {
 
   }
 };
+/* ============================================
+   SHOP VIDEO UPLOAD (vdo1, vdo2, vdo3)
+   ============================================ */
+
+exports.uploadShopVideo = async (req, res) => {
+  try {
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No Video Selected"
+      });
+    }
+
+    const { shop_id, video_no } = req.body;
+
+    if (!shop_id || !video_no) {
+      return res.status(400).json({
+        success: false,
+        message: "Shop ID & Video No Required"
+      });
+    }
+
+    const result = await new Promise((resolve, reject) => {
+
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "AERODECK/SHOP_VIDEOS",
+          public_id: `shop_${shop_id}_video${video_no}`,
+          overwrite: true,
+          invalidate: true,
+          resource_type: "video"   /* ✅ Video ke liye */
+        },
+        (err, result) => {
+          if (err) {
+            console.error("Cloudinary Error:", err);
+            return reject(err);
+          }
+          resolve(result);
+        }
+      );
+
+      stream.end(req.file.buffer);
+
+    });
+
+    return res.json({
+      success: true,
+      url: result.secure_url,
+      public_id: result.public_id
+    });
+
+  } catch (err) {
+
+    console.error("SHOP VIDEO UPLOAD FAILED:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
+};
