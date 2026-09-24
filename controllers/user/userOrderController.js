@@ -424,6 +424,9 @@ exports.getOrderDetails = async (req, res) => {
     oi.payment_status,
     oi.cancel_date,
     oi.return_date,
+    o.user_id,
+    o.payment_status AS order_payment_status,
+    o.created_at AS order_created_at,
     r.return_status,
     r.return_request_date
 
@@ -747,20 +750,23 @@ exports.cancelOrder = async (req, res) => {
         } = req.body;
 
 
-        const mysqlOrderDate = new Date(order_date)
-            .toISOString()
-            .slice(0, 19)
-            .replace("T", " ");
+        let mysqlOrderDate = null;
 
+        if (order_date) {
+            const parsed = new Date(order_date);
+            if (!isNaN(parsed.getTime())) {
+                mysqlOrderDate = parsed
+                    .toISOString()
+                    .slice(0, 19)
+                    .replace("T", " ");
+            }
+        }
 
         let paymentStatus = payment_status;
 
         if (paymentStatus === "PARTIAL") {
             paymentStatus = "PAID";
         }
-
-
-        // Cancel request ALWAYS starts with REQUESTED
         const cancelStatus = "REQUESTED";
 
 
