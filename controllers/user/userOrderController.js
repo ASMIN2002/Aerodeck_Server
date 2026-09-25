@@ -16,7 +16,8 @@ exports.placeOrder = async (req, res) => {
             gst,
             platform_fee,
             delivery_fee,
-            total_amount
+            total_amount,
+            hypo_points_used
 
         } = req.body;
 
@@ -44,25 +45,23 @@ exports.placeOrder = async (req, res) => {
         const [orderResult] = await pool.query(
 
             `INSERT INTO Orders_Aerodeck (
-
-        order_number,
-        user_id,
-        order_type,
-        total_items,
-        subtotal,
-        discount,
-        gst,
-        platform_fee,
-        delivery_fee,
-        total_amount,
-        payment_method,
-        payment_status,
-        order_status,
-        address_id
-
-    )
-
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    order_number,
+    user_id,
+    order_type,
+    total_items,
+    subtotal,
+    discount,
+    gst,
+    platform_fee,
+    delivery_fee,
+    total_amount,
+    payment_method,
+    payment_status,
+    order_status,
+    address_id,
+    is_hypo_used
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
 
@@ -79,7 +78,8 @@ exports.placeOrder = async (req, res) => {
                 payment_method,
                 paymentStatus,
                 "PLACED",
-                address_id
+                address_id,
+                hypo_points_used > 0 ? 1 : 0
 
             ]
 
@@ -316,6 +316,7 @@ exports.getOrders = async (req, res) => {
                 o.payment_method,
                 o.created_at,
                 o.address_id,
+                o.is_hypo_used, 
 
                 a.full_name,
                 a.mobile_number,
@@ -427,6 +428,7 @@ exports.getOrderDetails = async (req, res) => {
     o.user_id,
     o.payment_status AS order_payment_status,
     o.created_at AS order_created_at,
+    o.is_hypo_used,
     r.return_status,
     r.return_request_date
 
@@ -925,6 +927,139 @@ exports.returnProduct = async (req, res) => {
             success: false,
             message: err.message
 
+        });
+
+    }
+
+};
+
+exports.cancelWholeOrder = async (req, res) => {
+
+    try {
+
+        const {
+            session_token,
+            order_id,
+            cancel_reason
+        } = req.body;
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        /* ============================================
+           1. GET ALL CANCELABLE ITEMS
+           ============================================ */
+        const [items] = await pool.query(
+            `SELECT
+                order_item_id,
+                product_id,
+                product_type,
+                quantity,
+                payment_status,
+                created_at
+             FROM Order_Items_Aerodeck
+             WHERE order_id = ?
+             AND order_status NOT IN ('CANCELLED', 'DELIVERED')`,
+            [order_id]
+        );
+
+        if (items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No items available to cancel."
+            });
+        }
+
+        /* ============================================
+           2. LOOP — CANCEL EACH ITEM
+           ============================================ */
+        for (const item of items) {
+
+            let mysqlOrderDate = null;
+
+            if (item.created_at) {
+                const parsed = new Date(item.created_at);
+                if (!isNaN(parsed.getTime())) {
+                    mysqlOrderDate = parsed
+                        .toISOString()
+                        .slice(0, 19)
+                        .replace("T", " ");
+                }
+            }
+
+            let paymentStatus = item.payment_status;
+
+            if (paymentStatus === "PARTIAL") {
+                paymentStatus = "PAID";
+            }
+
+            /* 2a. Insert into Cancel_Aerodeck */
+            await pool.query(
+                `INSERT INTO Cancel_Aerodeck
+                (
+                    order_item_id,
+                    product_id,
+                    user_id,
+                    product_category,
+                    quantity,
+                    cancel_reason,
+                    order_date,
+                    payment_status,
+                    cancel_status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    item.order_item_id,
+                    item.product_id,
+                    user_id,
+                    item.product_type,
+                    item.quantity,
+                    cancel_reason,
+                    mysqlOrderDate,
+                    paymentStatus,
+                    "REQUESTED"
+                ]
+            );
+
+            /* 2b. Update item status */
+            await pool.query(
+                `UPDATE Order_Items_Aerodeck
+                 SET order_status = 'REQUESTED'
+                 WHERE order_item_id = ?`,
+                [item.order_item_id]
+            );
+
+        }
+
+        /* ============================================
+           3. UPDATE ORDER STATUS
+           ============================================ */
+        await pool.query(
+            `UPDATE Orders_Aerodeck
+             SET order_status = 'REQUESTED'
+             WHERE order_id = ?`,
+            [order_id]
+        );
+
+        res.json({
+            success: true,
+            message: "Order cancel request submitted.",
+            items_cancelled: items.length
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+            success: false,
+            message: err.message
         });
 
     }

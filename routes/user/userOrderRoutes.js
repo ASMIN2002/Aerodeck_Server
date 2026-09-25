@@ -10,7 +10,8 @@ const {
     cancelOrder,
     getCancelStatus,
     updateReturnDate,
-    returnProduct
+    returnProduct,
+    cancelWholeOrder
 
 } = require("../../controllers/user/userOrderController");
 
@@ -22,5 +23,6 @@ router.put("/orders/item-status", updateOrderItemStatus);
 router.post("/cancel-order", cancelOrder);
 router.post("/update-return-date", updateReturnDate);
 router.post("/return-product", returnProduct);
+router.post("/cancel-whole-order", cancelWholeOrder);
 
 module.exports = router;

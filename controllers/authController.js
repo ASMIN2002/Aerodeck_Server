@@ -4,7 +4,6 @@ const pendingRegistrations = new Map();
 const pendingLoginOtps = new Map();
 
 exports.register = async (req, res) => {
-    console.log("🔥 NEW REGISTER CONTROLLER HIT");
     try {
 
         const {
@@ -216,6 +215,33 @@ exports.verifyRegisterOtp = async (req, res) => {
         );
 
         const userId = result.insertId;
+        /* ============================================
+   USER_REWARDS INSERT — Promo code generate
+   ============================================ */
+
+        const [lastReward] = await pool.query(
+            `SELECT promo_code FROM USER_REWARDS
+     WHERE promo_code LIKE 'HE%HY'
+     ORDER BY id DESC LIMIT 1`
+        );
+
+        let nextNumber = 1;
+
+        if (lastReward.length > 0 && lastReward[0].promo_code) {
+            const match = lastReward[0].promo_code.match(/HE(\d{4})HY/);
+            if (match) {
+                nextNumber = parseInt(match[1]) + 1;
+            }
+        }
+
+        const promo_code = `HE${String(nextNumber).padStart(4, "0")}HY`;
+
+        await pool.query(
+            `INSERT INTO USER_REWARDS
+     (user_id, hypo_points, redeemed, promo_code, count)
+     VALUES (?, ?, ?, ?, ?)`,
+            [userId, 10, 0, promo_code, 0]
+        );
 
         const [versionRows] = await pool.query(
             `SELECT version

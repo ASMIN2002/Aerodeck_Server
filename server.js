@@ -39,6 +39,7 @@ const userInvoiceRoutes = require("./routes/user/userInvoiceRoutes");
 const userRoutes = require("./routes/user/userRoutes");
 const reviewRoutes = require("./routes/user/reviewRoutes");
 const smsRoutes = require("./routes/smsRoutes");
+const userRewardsRoutes = require("./routes/user/userRewardsRoutes");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -212,6 +213,7 @@ app.use("/api/user/invoice", userInvoiceRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/user", userRewardsRoutes);
 app.get("/", (req, res) => {
 
     res.send("AERODECK SERVER RUNNING");
