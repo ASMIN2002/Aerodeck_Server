@@ -237,9 +237,6 @@ exports.updateOrderStatus = async (req, res) => {
             order_status
         } = req.body;
 
-        /* ============================================
-           1. GET ITEM (product_id + order_id)
-           ============================================ */
         const [[item]] = await pool.query(
             `SELECT product_id, order_id
              FROM Order_Items_Aerodeck
@@ -254,9 +251,6 @@ exports.updateOrderStatus = async (req, res) => {
             });
         }
 
-        /* ============================================
-           2. UPDATE ITEM STATUS
-           ============================================ */
         await pool.query(
             `UPDATE Order_Items_Aerodeck
              SET order_status = ?
@@ -264,9 +258,6 @@ exports.updateOrderStatus = async (req, res) => {
             [order_status, order_item_id]
         );
 
-        /* ============================================
-           3. RETURN DATE LOGIC (G/S products)
-           ============================================ */
         if (
             order_status === "DELIVERED" &&
             (item.product_id.startsWith("G") ||
@@ -298,9 +289,6 @@ exports.updateOrderStatus = async (req, res) => {
 
         }
 
-        /* ============================================
-           4. CHECK — ALL ITEMS DELIVERED?
-           ============================================ */
         if (item.order_id) {
 
             const [countRows] = await pool.query(
@@ -318,7 +306,6 @@ exports.updateOrderStatus = async (req, res) => {
 
             if (totalItems > 0 && pendingItems === 0) {
 
-                /* Saare items delivered → Order DELIVERED */
                 await pool.query(
                     `UPDATE Orders_Aerodeck
                      SET order_status = 'DELIVERED'
@@ -326,9 +313,87 @@ exports.updateOrderStatus = async (req, res) => {
                     [item.order_id]
                 );
 
+                const [pendingRewardItems] = await pool.query(
+                    `SELECT COUNT(*) AS pending_count
+                     FROM Order_Items_Aerodeck oi
+                     LEFT JOIN Return_Aerodeck r 
+                        ON oi.order_item_id = r.order_item_id
+                     WHERE oi.order_id = ?
+                     AND (
+                         (r.return_status IS NOT NULL 
+                          AND r.return_status NOT IN ('NONE', ''))
+                         OR
+                         (
+                             oi.return_date IS NOT NULL
+                             AND oi.return_date >= NOW()
+                         )
+                     )`,
+                    [item.order_id]
+                );
+
+                const pendingRewardCount = Number(
+                    pendingRewardItems[0]?.pending_count || 0
+                );
+
+                if (pendingRewardCount === 0) {
+
+                    const [[valueRow]] = await pool.query(
+                        `SELECT SUM(unit_price * quantity) AS total_value
+                         FROM Order_Items_Aerodeck
+                         WHERE order_id = ?`,
+                        [item.order_id]
+                    );
+
+                    const totalValue = Number(valueRow?.total_value || 0);
+                    const chances = Math.floor(totalValue / 250);
+
+                    if (chances > 0) {
+
+                        const [[orderRow]] = await pool.query(
+                            `SELECT user_id FROM Orders_Aerodeck
+                             WHERE order_id = ?`,
+                            [item.order_id]
+                        );
+
+                        if (orderRow?.user_id) {
+
+                            const userId = orderRow.user_id;
+
+                            const [existing] = await pool.query(
+                                `SELECT id FROM USER_REWARDS
+                                 WHERE user_id = ? LIMIT 1`,
+                                [userId]
+                            );
+
+                            if (existing.length > 0) {
+
+                                await pool.query(
+                                    `UPDATE USER_REWARDS
+                                     SET count = count + ?,
+                                         updated_at = NOW()
+                                     WHERE user_id = ?`,
+                                    [chances, userId]
+                                );
+
+                            } else {
+
+                                await pool.query(
+                                    `INSERT INTO USER_REWARDS
+                                     (user_id, hypo_points, count, redeemed, updated_at)
+                                     VALUES (?, 0, ?, 0, NOW())`,
+                                    [userId, chances]
+                                );
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
             } else {
 
-                /* Kuch pending → Order PLACED */
                 await pool.query(
                     `UPDATE Orders_Aerodeck
                      SET order_status = 'PLACED'
