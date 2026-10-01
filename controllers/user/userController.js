@@ -51,9 +51,7 @@ exports.getProfile = async (req, res) => {
 
 };
 
-// ===============================
-// UPDATE USER NAME
-// ===============================
+
 exports.updateName = async (req, res) => {
 
     try {
@@ -129,9 +127,7 @@ exports.updateName = async (req, res) => {
     }
 
 };
-// ===============================
-// GET WHATSAPP ORDER DATA
-// ===============================
+
 exports.getWhatsAppOrderData = async (req, res) => {
 
     try {
@@ -180,9 +176,6 @@ exports.getWhatsAppOrderData = async (req, res) => {
 
 };
 
-// ===============================
-// SEND EMAIL OTP
-// ===============================
 exports.sendEmailOtp = async (req, res) => {
 
     try {
@@ -325,10 +318,6 @@ exports.sendEmailOtp = async (req, res) => {
 
 };
 
-
-// ===============================
-// VERIFY EMAIL OTP
-// ===============================
 exports.verifyEmailOtp = async (req, res) => {
 
     try {
@@ -444,6 +433,165 @@ exports.verifyEmailOtp = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Verification failed."
+        });
+
+    }
+
+};
+
+/* ============================================
+   GET TOTAL NOTIFICATION COUNT
+   → red dot ke liye
+   ============================================ */
+exports.getNotificationCount = async (req, res) => {
+
+    try {
+
+        const [rows] = await db.query(
+            `
+            SELECT COUNT(*) AS total
+            FROM heepit_notification
+            `
+        );
+
+        return res.json({
+            success: true,
+            count: rows[0].total
+        });
+
+    } catch (err) {
+
+        console.error("NOTIF COUNT ERROR:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
+
+/* ============================================
+   GET ALL NOTIFICATIONS
+   → Notification box ke liye
+   ============================================ */
+exports.getAllNotifications = async (req, res) => {
+
+    try {
+
+        const [rows] = await db.query(
+            `
+            SELECT
+                id,
+                notification,
+                status,
+                created_at
+            FROM heepit_notification
+            ORDER BY created_at DESC
+            `
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+
+        console.error("NOTIF FETCH ERROR:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
+
+exports.insertNotification = async (req, res) => {
+    try {
+        const { notification } = req.body;
+
+        if (!notification || notification.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "Notification text is required."
+            });
+        }
+
+        const cleanText = notification.trim();
+
+        if (cleanText.length > 200) {
+            return res.status(400).json({
+                success: false,
+                message: "Maximum 200 characters allowed."
+            });
+        }
+
+        const [result] = await db.query(
+            `
+            INSERT INTO heepit_notification
+            (notification)
+            VALUES (?)
+            `,
+            [cleanText]
+        );
+
+        return res.json({
+            success: true,
+            message: "Notification inserted successfully.",
+            id: result.insertId
+        });
+
+    } catch (err) {
+
+        console.error("NOTIF INSERT ERROR:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+
+    }
+
+};
+
+exports.toggleNotificationStatus = async (req, res) => {
+
+    try {
+
+        const { id, status } = req.body;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Notification ID is required."
+            });
+        }
+
+        await db.query(
+            `
+            UPDATE heepit_notification
+            SET status = ?
+            WHERE id = ?
+            `,
+            [status ? 1 : 0, id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Status updated."
+        });
+
+    } catch (err) {
+
+        console.error("NOTIF STATUS ERROR:", err);
+
+        return res.status(500).json({
+            success: false,
+            message: err.message
         });
 
     }
