@@ -19,10 +19,6 @@ function getPublicId(url) {
 
 }
 
-/* ============================================
-   ADD SHOP
-   ============================================ */
-
 const addShop = async (req, res) => {
 
     try {
@@ -45,14 +41,14 @@ const addShop = async (req, res) => {
             size,
             printing,
             delivery,
-            return_days
+            return_days,
+            posted_by
         } = req.body;
 
 
         const [result] = await db.query(
 
             `INSERT INTO Shop_Aerodeck (
-
                 shop_name,
                 shop_category,
                 shop_description,
@@ -66,9 +62,11 @@ const addShop = async (req, res) => {
                 shop_image4,
                 shop_total_likes,
                 shop_rating,
-                shop_status
-
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                shop_status,
+                posted_by,
+                updated_by,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
 
             [
 
@@ -85,7 +83,9 @@ const addShop = async (req, res) => {
                 shop_image4,
                 0,
                 0,
-                shop_status
+                shop_status,
+                posted_by || null,
+                posted_by || null
 
             ]
 
@@ -171,9 +171,6 @@ const addShop = async (req, res) => {
 };
 
 
-/* ============================================
-   GET SHOPS
-   ============================================ */
 
 const getShops = async (req, res) => {
 
@@ -183,7 +180,65 @@ const getShops = async (req, res) => {
             "SELECT * FROM Shop_Aerodeck ORDER BY shop_id DESC"
         );
 
-        res.json(rows);
+        /* ============================================
+           RESOLVE USERNAME → NAME
+           (founders first, then heepitadmin)
+           ============================================ */
+
+        const resolveName = async (username) => {
+
+            if (!username) return null;
+
+            // 1. founders check
+            const [founderRows] = await db.query(
+                `SELECT full_name
+                 FROM founders
+                 WHERE username = ?
+                 LIMIT 1`,
+                [username]
+            );
+
+            if (founderRows.length > 0 && founderRows[0].full_name) {
+                return founderRows[0].full_name;
+            }
+
+            // 2. heepitadmin check
+            const [adminRows] = await db.query(
+                `SELECT name
+                 FROM heepitadmin
+                 WHERE username = ?
+                 LIMIT 1`,
+                [username]
+            );
+
+            if (adminRows.length > 0 && adminRows[0].name) {
+                return adminRows[0].name;
+            }
+
+            // 3. fallback — username as-is
+            return username;
+        };
+
+        /* ============================================
+           ATTACH RESOLVED NAMES
+           ============================================ */
+
+        const result = [];
+
+        for (const shop of rows) {
+
+            const postedByName = await resolveName(shop.posted_by);
+            const updatedByName = await resolveName(shop.updated_by);
+
+            result.push({
+                ...shop,
+                posted_by_name: postedByName,
+                updated_by_name: updatedByName
+            });
+
+        }
+
+        res.json(result);
 
     } catch (err) {
 
@@ -195,10 +250,6 @@ const getShops = async (req, res) => {
 
 };
 
-
-/* ============================================
-   UPDATE SHOP
-   ============================================ */
 
 const updateShop = async (req, res) => {
 
@@ -234,7 +285,8 @@ const updateShop = async (req, res) => {
             vdo2_public_id,
             vdo3,
             vdo3_public_id,
-            shop_status
+            shop_status,
+            updated_by
 
         } = req.body;
 
@@ -278,7 +330,9 @@ const updateShop = async (req, res) => {
                 shop_image4 = ?,
                 shop_image4_public_id = ?,
 
-                shop_status = ?
+                shop_status = ?,
+                updated_by = ?,
+                updated_at = NOW()
 
              WHERE shop_id = ?`,
 
@@ -305,6 +359,7 @@ const updateShop = async (req, res) => {
                 shop_image4_public_id,
 
                 shop_status,
+                updated_by || null,
                 shop_id
 
             ]
@@ -421,7 +476,6 @@ const updateShop = async (req, res) => {
     }
 
 };
-
 
 /* ============================================
    DELETE SHOP
