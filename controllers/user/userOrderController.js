@@ -134,6 +134,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 unitPrice = Number(item.shop_price);
                 cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
+                const [shopRows] = await pool.query(
+                    `SELECT shop_category FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
+                    [item.product_id]
+                );
+                productCategory = shopRows.length ? shopRows[0].shop_category : null;
+
             } else {
                 productType = "CARD";
                 productName = item.card_name;
@@ -145,28 +151,27 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             }
             await pool.query(
 
-                `INSERT INTO Order_Items_Aerodeck (
-
-            order_id,
-            product_id,
-            product_type,
-            product_name,
-            product_image,
-            unit_price,
-            quantity,
-            total_price,
-            order_status,
-            payment_status,
-            cancel_date
-
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               `INSERT INTO Order_Items_Aerodeck (
+    order_id,
+    product_id,
+    product_type,
+    category,
+    product_name,
+    product_image,
+    unit_price,
+    quantity,
+    total_price,
+    order_status,
+    payment_status,
+    cancel_date
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
                 [
                     order_id,
                     item.product_id,
                     productType,
+                    productCategory,
                     productName,
                     productImage,
                     unitPrice,

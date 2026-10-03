@@ -44,6 +44,13 @@ const userRewardsRoutes = require("./routes/user/userRewardsRoutes");
 const app = express();
 const httpServer = http.createServer(app);
 
+
+
+// ADMIN
+const adminLoginRoutes = require("./routes/admin/adminLoginRoutes");
+const heepitadminRoutes = require("./routes/admin/heepitadminRoutes");
+
+
 const io = new Server(httpServer, {
     cors: {
         origin: "*"
@@ -183,6 +190,8 @@ const limiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false
 });
+
+
 app.use("/api/upload", uploadRoutes);
 app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
@@ -214,6 +223,14 @@ app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/user", userRewardsRoutes);
+
+
+// ADMIN ROUTES
+app.use("/api/admin", adminLoginRoutes);
+app.use("/api/admin", heepitadminRoutes);
+
+
+
 app.get("/", (req, res) => {
 
     res.send("AERODECK SERVER RUNNING");

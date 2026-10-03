@@ -49,7 +49,8 @@ exports.getCancels = async (req, res) => {
                 oi.unit_price,
                 oi.total_price,
                 oi.order_id,
-                oi.order_status
+                oi.order_status,
+                oi.category
 
              FROM Cancel_Aerodeck c
 
