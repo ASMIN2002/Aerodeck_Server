@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
+
 exports.placeOrder = async (req, res) => {
 
     try {
@@ -42,6 +43,7 @@ exports.placeOrder = async (req, res) => {
                 : order_type === "CARD"
                     ? "PARTIAL"
                     : "PAID";
+
         const [orderResult] = await pool.query(
 
             `INSERT INTO Orders_Aerodeck (
@@ -117,6 +119,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             let productImage = "";
             let unitPrice = 0;
             let cancelDate = null;
+            let productCategory = null;
 
             if (item.product_id.startsWith("G")) {
 
@@ -135,12 +138,39 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 cancelDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
                 const [shopRows] = await pool.query(
-                    `SELECT shop_category FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
+                    `SELECT shop_category, posted_by FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
                     [item.product_id]
                 );
+
                 productCategory = shopRows.length ? shopRows[0].shop_category : null;
 
+                /* ============================================
+                   UPDATE PENDING COUNT IN STATS
+                   ============================================ */
+                if (shopRows.length && shopRows[0].posted_by) {
+
+                    const postedBy = shopRows[0].posted_by;
+
+                    const [adminRows] = await pool.query(
+                        `SELECT id FROM heepitadmin WHERE username = ? LIMIT 1`,
+                        [postedBy]
+                    );
+
+                    if (adminRows.length > 0) {
+
+                        await pool.query(
+                            `UPDATE heepitadmin_stats
+                             SET pending = pending + 1
+                             WHERE admin_id = ?`,
+                            [adminRows[0].id]
+                        );
+
+                    }
+
+                }
+
             } else {
+
                 productType = "CARD";
                 productName = item.card_name;
                 productImage = item.card_image1;
@@ -148,10 +178,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 cancelDate = new Date(
                     Date.now() + 24 * 60 * 60 * 1000
                 );
+
             }
+
             await pool.query(
 
-               `INSERT INTO Order_Items_Aerodeck (
+                `INSERT INTO Order_Items_Aerodeck (
     order_id,
     product_id,
     product_type,
@@ -183,6 +215,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 ]
 
             );
+
             await pool.query(
 
                 `UPDATE Order_Items_Aerodeck
@@ -263,7 +296,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
         }
 
-
         res.json({
 
             success: true,
@@ -275,6 +307,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             order_number: orderNumber
 
         });
+
     } catch (error) {
 
         console.error(error);

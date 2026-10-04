@@ -208,3 +208,128 @@ exports.updateProfileImage = async (req, res) => {
     }
 
 };
+
+exports.createAdmin = async (req, res) => {
+
+    try {
+
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "Username and password required."
+
+            });
+
+        }
+
+        /* ============================================
+           CHECK USERNAME EXISTS
+           ============================================ */
+
+        const [existing] = await pool.query(
+
+            `SELECT id FROM heepitadmin WHERE username = ? LIMIT 1`,
+
+            [username]
+
+        );
+
+        if (existing.length > 0) {
+
+            return res.json({
+
+                success: false,
+
+                message: "Username already exists, regenerate."
+
+            });
+
+        }
+
+        /* ============================================
+           INSERT INTO heepitadmin
+           (only username, password — rest NULL)
+           ============================================ */
+
+        const [adminResult] = await pool.query(
+
+            `INSERT INTO heepitadmin
+             (username, password)
+             VALUES (?, ?)`,
+
+            [username, password]
+
+        );
+
+        const newAdminId = adminResult.insertId;
+
+        /* ============================================
+           GET SHORT MONTH NAME (uppercase)
+           ============================================ */
+
+        const monthShort = new Date()
+
+            .toLocaleString("en-US", { month: "short" })
+
+            .toUpperCase();
+
+        /* ============================================
+           INSERT INTO heepitadmin_stats
+           (admin_id, rest defaults, analysh = month)
+           ============================================ */
+
+        await pool.query(
+
+            `INSERT INTO heepitadmin_stats
+             (
+                admin_id,
+                likes,
+                ratings,
+                sells,
+                pending,
+                delivered,
+                commission,
+                analysh
+             )
+             VALUES (?, 0, 0, 0, 0, 0, 0, ?)`,
+
+            [newAdminId, monthShort]
+
+        );
+
+        /* ============================================
+           SUCCESS
+           ============================================ */
+
+        return res.json({
+
+            success: true,
+
+            admin_id: newAdminId,
+
+            message: "Admin created successfully."
+
+        });
+
+    }
+
+    catch (err) {
+
+        console.log(err);
+
+        return res.status(500).json({
+
+            success: false,
+
+            message: err.message
+
+        });
+
+    }
+
+};

@@ -4,7 +4,8 @@ const router = express.Router();
 
 const {
     createFounder,
-    updateProfileImage
+    updateProfileImage,
+    createAdmin
 } = require("../controllers/founderController");
 
 router.post(
@@ -15,6 +16,11 @@ router.post(
 router.put(
     "/profile-image",
     updateProfileImage
+);
+
+router.post(
+    "/create-admin",
+    createAdmin
 );
 
 module.exports = router;

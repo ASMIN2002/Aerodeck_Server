@@ -259,6 +259,113 @@ exports.updateOrderStatus = async (req, res) => {
             [order_status, order_item_id]
         );
 
+        /* ============================================
+           STATS UPDATE — SHOP item DELIVERED hone pe
+           ============================================ */
+        if (order_status === "DELIVERED") {
+
+            const [[itemFull]] = await pool.query(
+                `SELECT product_id, product_type, total_price
+                 FROM Order_Items_Aerodeck
+                 WHERE order_item_id = ?`,
+                [order_item_id]
+            );
+
+            if (itemFull && itemFull.product_type === "SHOP") {
+
+                const [shopRows] = await pool.query(
+                    `SELECT posted_by FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
+                    [itemFull.product_id]
+                );
+
+                if (shopRows.length > 0 && shopRows[0].posted_by) {
+
+                    const postedBy = shopRows[0].posted_by;
+
+                    const [adminRows] = await pool.query(
+                        `SELECT id FROM heepitadmin WHERE username = ? LIMIT 1`,
+                        [postedBy]
+                    );
+
+                    if (adminRows.length > 0) {
+
+                        const adminId = adminRows[0].id;
+                        const sellAmount = Number(itemFull.total_price) || 0;
+                        const commissionAmount = sellAmount * 0.10;
+
+                        /* ---- Current month short ---- */
+                        const monthNames = [
+                            "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+                        ];
+                        const currentMonth =
+                            monthNames[new Date().getMonth()];
+
+                        /* ---- Get existing analysh ---- */
+                        const [[statsRow]] = await pool.query(
+                            `SELECT analysh FROM heepitadmin_stats
+                             WHERE admin_id = ?
+                             LIMIT 1`,
+                            [adminId]
+                        );
+
+                        let analyshStr = statsRow?.analysh || "";
+
+                        /* ---- Update analysh ---- */
+                        const parts = analyshStr
+                            .split(",")
+                            .map((p) => p.trim())
+                            .filter(Boolean);
+
+                        const lastIdx = parts.length - 1;
+
+                        if (
+                            lastIdx >= 0 &&
+                            parts[lastIdx].startsWith(currentMonth + "~")
+                        ) {
+
+                            const oldVal =
+                                Number(parts[lastIdx].split("~")[1]) || 0;
+                            const newVal = oldVal + sellAmount;
+
+                            parts[lastIdx] = `${currentMonth}~${newVal}`;
+
+                        } else {
+
+                            parts.push(`${currentMonth}~${sellAmount}`);
+
+                        }
+
+                        analyshStr = parts.join(",");
+
+                        /* ---- Update stats row ---- */
+                        await pool.query(
+                            `UPDATE heepitadmin_stats
+                             SET sells = sells + ?,
+                                 commission = commission + ?,
+                                 delivered = delivered + 1,
+                                 pending = GREATEST(pending - 1, 0),
+                                 analysh = ?
+                             WHERE admin_id = ?`,
+                            [
+                                sellAmount,
+                                commissionAmount,
+                                analyshStr,
+                                adminId
+                            ]
+                        );
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        /* ============================================
+           RETURN DATE LOGIC (existing)
+           ============================================ */
         if (
             order_status === "DELIVERED" &&
             (item.product_id.startsWith("G") ||
@@ -290,6 +397,9 @@ exports.updateOrderStatus = async (req, res) => {
 
         }
 
+        /* ============================================
+           ORDER STATUS UPDATE + REWARDS (existing)
+           ============================================ */
         if (item.order_id) {
 
             const [countRows] = await pool.query(

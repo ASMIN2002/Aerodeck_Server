@@ -201,9 +201,6 @@ exports.getCategoriesByType = async (req, res) => {
   }
 };
 
-/* ============================================
-   UPDATE SECTION
-   ============================================ */
 exports.updateSection = async (req, res) => {
   try {
     const { admin_id, section } = req.body;
@@ -239,6 +236,141 @@ exports.updateSection = async (req, res) => {
 
   } catch (err) {
     console.error("UPDATE SECTION ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
+    });
+  }
+};
+
+exports.getAdminStats = async (req, res) => {
+  try {
+    const { admin_id } = req.params;
+
+    if (!admin_id) {
+      return res.status(400).json({
+        success: false,
+        message: "admin_id is required."
+      });
+    }
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        likes,
+        ratings,
+        sells,
+        pending,
+        delivered,
+        commission,
+        analysh,
+        created_at
+      FROM heepitadmin_stats
+      WHERE admin_id = ?
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [admin_id]
+    );
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          likes: 0,
+          ratings: 0,
+          sells: 0,
+          pending: 0,
+          delivered: 0,
+          commission: 0,
+          analysh: null,
+          created_at: null
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: rows[0]
+    });
+
+  } catch (err) {
+    console.error("GET ADMIN STATS ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
+    });
+  }
+};
+
+exports.getAdminStatsRealtime = async (req, res) => {
+  try {
+    const { admin_id } = req.params;
+
+    if (!admin_id) {
+      return res.status(400).json({
+        success: false,
+        message: "admin_id is required."
+      });
+    }
+
+    /* ---- Admin ka username nikalo ---- */
+    const [[adminRow]] = await db.query(
+      `SELECT username FROM heepitadmin WHERE id = ? LIMIT 1`,
+      [admin_id]
+    );
+
+    if (!adminRow) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found."
+      });
+    }
+
+    const adminUsername = adminRow.username;
+
+    /* ---- Shop_Aerodeck se likes & ratings ---- */
+    const [[shopAgg]] = await db.query(
+      `SELECT
+         COALESCE(SUM(shop_total_likes), 0) AS total_likes,
+         COALESCE(AVG(shop_rating), 0) AS avg_rating
+       FROM Shop_Aerodeck
+       WHERE posted_by = ?`,
+      [adminUsername]
+    );
+
+    /* ---- heepitadmin_stats se baaki ---- */
+    const [[statsRow]] = await db.query(
+      `SELECT
+         sells,
+         pending,
+         delivered,
+         commission,
+         analysh,
+         created_at
+       FROM heepitadmin_stats
+       WHERE admin_id = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [admin_id]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        likes: Number(shopAgg.total_likes) || 0,
+        ratings: Number(Number(shopAgg.avg_rating).toFixed(2)) || 0,
+        sells: Number(statsRow?.sells) || 0,
+        pending: Number(statsRow?.pending) || 0,
+        delivered: Number(statsRow?.delivered) || 0,
+        commission: Number(statsRow?.commission) || 0,
+        analysh: statsRow?.analysh || null,
+        created_at: statsRow?.created_at || null
+      }
+    });
+
+  } catch (err) {
+    console.error("GET ADMIN STATS REALTIME ERROR:", err);
     return res.status(500).json({
       success: false,
       message: "Server error."
