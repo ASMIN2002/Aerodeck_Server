@@ -54,111 +54,82 @@ const heepitadminRoutes = require("./routes/admin/heepitadminRoutes");
 const io = new Server(httpServer, {
     cors: {
         origin: "*"
-    }
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    transports: ["websocket", "polling"]
 });
-app.set("io", io);
-io.on("connection", (socket) => {
-    console.log(
-        "SMS device connected:",
-        socket.id
-    );
-    socket.on("register_sms_device", async (data) => {
 
+app.set("io", io);
+
+io.on("connection", (socket) => {
+    console.log("SMS device connected:", socket.id);
+
+    socket.on("register_sms_device", async (data) => {
         try {
-            const {
-                device_id,
-                device_token
-            } = data;
+            const { device_id, device_token } = data;
+
+            console.log("register_sms_device called:", device_id);  // ✅
 
             const [rows] = await pool.query(
                 `SELECT
-                device_id,
-                is_primary,
-                is_active
-             FROM SMS_Device_Aerodeck
-             WHERE device_id = ?
-             AND device_token = ?
-             LIMIT 1`,
-                [
                     device_id,
-                    device_token
-                ]
+                    is_primary,
+                    is_active
+                 FROM SMS_Device_Aerodeck
+                 WHERE device_id = ?
+                 AND device_token = ?
+                 LIMIT 1`,
+                [device_id, device_token]
             );
 
             if (rows.length === 0) {
-                socket.emit(
-                    "sms_device_verified",
-                    {
-                        success: false,
-                        message: "Invalid SMS device."
-                    }
-                );
+                socket.emit("sms_device_verified", {
+                    success: false,
+                    message: "Invalid SMS device."
+                });
                 return;
             }
 
             if (rows[0].is_active !== 1) {
-                socket.emit(
-                    "sms_device_verified",
-                    {
-                        success: false,
-                        message: "SMS device is inactive."
-                    }
-                );
+                socket.emit("sms_device_verified", {
+                    success: false,
+                    message: "SMS device is inactive."
+                });
                 return;
             }
+
             if (rows[0].is_primary === 1) {
                 socket.join("sms_primary");
+                console.log("Socket joined sms_primary:", socket.id, "device:", device_id);  // ✅
             }
-            socket.emit(
-                "sms_device_verified",
-                {
-                    success: true,
-                    is_primary:
-                        rows[0].is_primary === 1
-                }
-            );
+
+            socket.emit("sms_device_verified", {
+                success: true,
+                is_primary: rows[0].is_primary === 1
+            });
 
         } catch (error) {
-
-            console.error(
-                "SMS device verification error:",
-                error
-            );
-
-            socket.emit(
-                "sms_device_verified",
-                {
-                    success: false,
-                    message: "Device verification failed."
-                }
-            );
-
+            console.error("SMS device verification error:", error);
+            socket.emit("sms_device_verified", {
+                success: false,
+                message: "Device verification failed."
+            });
         }
-
     });
 
     socket.on("test_sms_command", () => {
-
         socket.emit("sms_command", {
-
             type: "TEST",
-
             phoneNumber: "7847828859",
-
-            message: "AERODECK TEST OTP 123456"
-
+            message: "HEEPIT TEST OTP 123456"  // ✅ AERODECK → HEEPIT
         });
-
     });
+
     socket.on("disconnect", () => {
-
-        console.log(
-            "SMS device disconnected:",
-            socket.id
-        );
-
+        console.log("SMS device disconnected:", socket.id);
     });
-
 });
 app.use(helmet());
 const allowedOrigins = [
@@ -168,7 +139,7 @@ const allowedOrigins = [
     "http://localhost:3000",
     "https://heepit.netlify.app",
     "https://adminheepit.netlify.app",
-    "https://heepitfounder.netlify.app" 
+    "https://heepitfounder.netlify.app"
 ];
 app.use(cors({
     origin(origin, callback) {
