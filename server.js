@@ -17,7 +17,7 @@ const founderOrderRoutes = require("./routes/founderOrderRoutes");
 const heepitAppsRoutes = require("./routes/heepitAppsRoutes");
 const detailsRoutes = require("./routes/detailsRoutes");
 const openOfferRoutes = require("./routes/openOfferRoutes");
-const videoheroRoutes = require("./routes/videoheroRoutes"); 
+const videoheroRoutes = require("./routes/videoheroRoutes");
 
 // SECURITY
 const helmet = require("helmet");
@@ -167,9 +167,9 @@ const allowedOrigins = [
     "https://localhost",
     "http://localhost:3000",
     "https://heepit.netlify.app",
-    "https://adminheepit.netlify.app" 
+    "https://adminheepit.netlify.app",
+    "https://heepitfounder.netlify.app" 
 ];
-
 app.use(cors({
     origin(origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -205,7 +205,7 @@ app.use("/api/founder/orders", founderOrderRoutes);
 app.use("/api", heepitAppsRoutes);
 app.use("/api", detailsRoutes);
 app.use("/api/openoffers", openOfferRoutes);
-app.use("/api/videohero", videoheroRoutes); 
+app.use("/api/videohero", videoheroRoutes);
 
 // USER
 app.use("/api/user", userProductRoutes);
