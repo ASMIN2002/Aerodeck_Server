@@ -2,9 +2,7 @@ const db = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 exports.getProfile = async (req, res) => {
-
     try {
-
         const { session_token } = req.body;
 
         if (!session_token) {
@@ -24,12 +22,7 @@ exports.getProfile = async (req, res) => {
         }
 
         const [rows] = await db.query(
-            `
-            SELECT *
-            FROM User_Aerodeck
-            WHERE user_id = ?
-            LIMIT 1
-            `,
+            `SELECT * FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
             [user_id]
         );
 
@@ -39,27 +32,18 @@ exports.getProfile = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error(err);
-
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
 
 exports.updateName = async (req, res) => {
-
     try {
-
-        const {
-            session_token,
-            full_name
-        } = req.body;
+        const { session_token, full_name } = req.body;
 
         if (!session_token) {
             return res.status(401).json({
@@ -77,18 +61,6 @@ exports.updateName = async (req, res) => {
 
         const user_id = await getUserIdFromSession(session_token);
 
-        await db.query(
-            `
-    UPDATE User_Aerodeck
-    SET full_name = ?
-    WHERE user_id = ?
-    `,
-            [
-                full_name.trim(),
-                user_id
-            ]
-        );
-
         if (!user_id) {
             return res.status(401).json({
                 success: false,
@@ -96,16 +68,13 @@ exports.updateName = async (req, res) => {
             });
         }
 
+        await db.query(
+            `UPDATE User_Aerodeck SET full_name = ? WHERE user_id = ?`,
+            [full_name.trim(), user_id]
+        );
 
-
-
-        // Return updated user
         const [rows] = await db.query(
-            `
-            SELECT *
-            FROM User_Aerodeck
-            WHERE user_id = ?
-            `,
+            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
             [user_id]
         );
 
@@ -116,22 +85,157 @@ exports.updateName = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error(err);
-
         return res.status(500).json({
             success: false,
             message: "Server error."
         });
-
     }
-
 };
 
-exports.getWhatsAppOrderData = async (req, res) => {
 
+exports.updateWhatsapp = async (req, res) => {
     try {
+        const { session_token, whatsapp_number } = req.body;
 
+        if (!session_token) {
+            return res.status(401).json({
+                success: false,
+                message: "Session token is required."
+            });
+        }
+
+        if (!whatsapp_number || !/^\d{10}$/.test(whatsapp_number)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid 10 digit WhatsApp number is required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        const [existing] = await db.query(
+            `SELECT user_id FROM User_Aerodeck
+             WHERE whatsapp_number = ? AND user_id != ?
+             LIMIT 1`,
+            [whatsapp_number, user_id]
+        );
+
+        if (existing.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: "This WhatsApp number is already registered."
+            });
+        }
+
+        await db.query(
+            `UPDATE User_Aerodeck
+             SET whatsapp_number = ?,
+                 is_whatsapp_verified = 0
+             WHERE user_id = ?`,
+            [whatsapp_number, user_id]
+        );
+
+        const [rows] = await db.query(
+            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
+            [user_id]
+        );
+
+        return res.json({
+            success: true,
+            message: "WhatsApp number saved.",
+            user: rows[0]
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: "Server error."
+        });
+    }
+};
+
+
+exports.updateMobile = async (req, res) => {
+    try {
+        const { session_token, mobile_number } = req.body;
+
+        if (!session_token) {
+            return res.status(401).json({
+                success: false,
+                message: "Session token is required."
+            });
+        }
+
+        if (!mobile_number || !/^\d{10}$/.test(mobile_number)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid 10 digit mobile number is required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        const [existing] = await db.query(
+            `SELECT user_id FROM User_Aerodeck
+             WHERE mobile_number = ? AND user_id != ?
+             LIMIT 1`,
+            [mobile_number, user_id]
+        );
+
+        if (existing.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: "This mobile number is already registered."
+            });
+        }
+
+        await db.query(
+            `UPDATE User_Aerodeck
+             SET mobile_number = ?,
+                 is_mobile_verified = 0
+             WHERE user_id = ?`,
+            [mobile_number, user_id]
+        );
+
+        const [rows] = await db.query(
+            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
+            [user_id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Mobile number saved.",
+            user: rows[0]
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: "Server error."
+        });
+    }
+};
+
+
+exports.getWhatsAppOrderData = async (req, res) => {
+    try {
         const { session_token, product_id } = req.body;
 
         if (!session_token) {
@@ -164,26 +268,18 @@ exports.getWhatsAppOrderData = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error(err);
-
         return res.status(500).json({
             success: false,
             message: "Server error."
         });
-
     }
-
 };
 
+
 exports.sendEmailOtp = async (req, res) => {
-
     try {
-
-        const {
-            session_token,
-            email
-        } = req.body;
+        const { session_token, email } = req.body;
 
         if (!session_token) {
             return res.status(401).json({
@@ -210,15 +306,9 @@ exports.sendEmailOtp = async (req, res) => {
 
         const cleanEmail = email.trim().toLowerCase();
 
-        // Check whether this email already belongs to another user
         const [existingUsers] = await db.query(
-            `
-            SELECT user_id
-            FROM User_Aerodeck
-            WHERE email = ?
-            AND user_id != ?
-            LIMIT 1
-            `,
+            `SELECT user_id FROM User_Aerodeck
+             WHERE email = ? AND user_id != ? LIMIT 1`,
             [cleanEmail, user_id]
         );
 
@@ -229,75 +319,28 @@ exports.sendEmailOtp = async (req, res) => {
             });
         }
 
-        // Generate 6 digit OTP
-        const otp = Math.floor(
-            100000 + Math.random() * 900000
-        ).toString();
-
-        // OTP expires after 5 minutes
-        const expiresAt = new Date(
-            Date.now() + 5 * 60 * 1000
-        );
-
-        // Save OTP
-        // ===============================
-        // SAVE EMAIL OTP
-        // ===============================
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
         const [otpResult] = await db.query(
-            `
-    UPDATE User_OTP_Aerodeck
-    SET email_otp = ?,
-        email_otp_expires_at = ?
-    WHERE user_id = ?
-    `,
-            [
-                otp,
-                expiresAt,
-                user_id
-            ]
+            `UPDATE User_OTP_Aerodeck
+             SET email_otp = ?, email_otp_expires_at = ?
+             WHERE user_id = ?`,
+            [otp, expiresAt, user_id]
         );
 
         if (otpResult.affectedRows === 0) {
-
-            // OTP row does not exist → create it
             await db.query(
-                `
-        INSERT INTO User_OTP_Aerodeck
-        (
-            user_id,
-            email_otp,
-            email_otp_expires_at
-        )
-        VALUES (?, ?, ?)
-        `,
-                [
-                    user_id,
-                    otp,
-                    expiresAt
-                ]
-            );
-
-            console.log(
-                "EMAIL OTP ROW CREATED:",
-                user_id
-            );
-
-        } else {
-
-            console.log(
-                "EMAIL OTP UPDATED:",
-                user_id
+                `INSERT INTO User_OTP_Aerodeck
+                 (user_id, email_otp, email_otp_expires_at)
+                 VALUES (?, ?, ?)`,
+                [user_id, otp, expiresAt]
             );
         }
 
-        // Send email
         const { sendEmailOtp } = require("../../services/emailService");
 
-        await sendEmailOtp(
-            cleanEmail,
-            otp
-        );
+        await sendEmailOtp(cleanEmail, otp);
 
         return res.json({
             success: true,
@@ -305,28 +348,19 @@ exports.sendEmailOtp = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("SEND EMAIL OTP ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: err.message,
             error: err.code || "UNKNOWN_ERROR"
         });
-
     }
-
 };
 
+
 exports.verifyEmailOtp = async (req, res) => {
-
     try {
-
-        const {
-            session_token,
-            email,
-            otp
-        } = req.body;
+        const { session_token, email, otp } = req.body;
 
         if (!session_token) {
             return res.status(401).json({
@@ -354,13 +388,9 @@ exports.verifyEmailOtp = async (req, res) => {
         const cleanEmail = email.trim().toLowerCase();
 
         const [rows] = await db.query(
-            `
-            SELECT email_otp,
-                   email_otp_expires_at
-            FROM User_OTP_Aerodeck
-            WHERE user_id = ?
-            LIMIT 1
-            `,
+            `SELECT email_otp, email_otp_expires_at
+             FROM User_OTP_Aerodeck
+             WHERE user_id = ? LIMIT 1`,
             [user_id]
         );
 
@@ -373,18 +403,13 @@ exports.verifyEmailOtp = async (req, res) => {
 
         const otpData = rows[0];
 
-        // Check OTP
-        if (
-            !otpData.email_otp ||
-            otpData.email_otp !== String(otp)
-        ) {
+        if (!otpData.email_otp || otpData.email_otp !== String(otp)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid OTP."
             });
         }
 
-        // Check expiry
         if (
             !otpData.email_otp_expires_at ||
             new Date() > new Date(otpData.email_otp_expires_at)
@@ -395,28 +420,15 @@ exports.verifyEmailOtp = async (req, res) => {
             });
         }
 
-        // Update user email and verification
         await db.query(
-            `
-            UPDATE User_Aerodeck
-            SET email = ?,
-                is_email_verified = 1
-            WHERE user_id = ?
-            `,
-            [
-                cleanEmail,
-                user_id
-            ]
+            `UPDATE User_Aerodeck
+             SET email = ?, is_email_verified = 1
+             WHERE user_id = ?`,
+            [cleanEmail, user_id]
         );
 
-        // Return updated profile
         const [updatedRows] = await db.query(
-            `
-            SELECT *
-            FROM User_Aerodeck
-            WHERE user_id = ?
-            LIMIT 1
-            `,
+            `SELECT * FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
             [user_id]
         );
 
@@ -427,31 +439,19 @@ exports.verifyEmailOtp = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error(err);
-
         return res.status(500).json({
             success: false,
             message: "Verification failed."
         });
-
     }
-
 };
 
-/* ============================================
-   GET TOTAL NOTIFICATION COUNT
-   → red dot ke liye
-   ============================================ */
+
 exports.getNotificationCount = async (req, res) => {
-
     try {
-
         const [rows] = await db.query(
-            `
-            SELECT COUNT(*) AS total
-            FROM heepit_notification
-            `
+            `SELECT COUNT(*) AS total FROM heepit_notification`
         );
 
         return res.json({
@@ -460,36 +460,21 @@ exports.getNotificationCount = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("NOTIF COUNT ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
-/* ============================================
-   GET ALL NOTIFICATIONS
-   → Notification box ke liye
-   ============================================ */
+
 exports.getAllNotifications = async (req, res) => {
-
     try {
-
         const [rows] = await db.query(
-            `
-            SELECT
-                id,
-                notification,
-                status,
-                created_at
-            FROM heepit_notification
-            ORDER BY created_at DESC
-            `
+            `SELECT id, notification, status, created_at
+             FROM heepit_notification
+             ORDER BY created_at DESC`
         );
 
         return res.json({
@@ -498,17 +483,14 @@ exports.getAllNotifications = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("NOTIF FETCH ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
+
 
 exports.insertNotification = async (req, res) => {
     try {
@@ -531,11 +513,7 @@ exports.insertNotification = async (req, res) => {
         }
 
         const [result] = await db.query(
-            `
-            INSERT INTO heepit_notification
-            (notification)
-            VALUES (?)
-            `,
+            `INSERT INTO heepit_notification (notification) VALUES (?)`,
             [cleanText]
         );
 
@@ -546,22 +524,17 @@ exports.insertNotification = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("NOTIF INSERT ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
+
 exports.toggleNotificationStatus = async (req, res) => {
-
     try {
-
         const { id, status } = req.body;
 
         if (!id) {
@@ -572,11 +545,7 @@ exports.toggleNotificationStatus = async (req, res) => {
         }
 
         await db.query(
-            `
-            UPDATE heepit_notification
-            SET status = ?
-            WHERE id = ?
-            `,
+            `UPDATE heepit_notification SET status = ? WHERE id = ?`,
             [status ? 1 : 0, id]
         );
 
@@ -586,14 +555,10 @@ exports.toggleNotificationStatus = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("NOTIF STATUS ERROR:", err);
-
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };

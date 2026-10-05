@@ -16,6 +16,18 @@ router.put(
 );
 
 
+router.put(
+    "/update-whatsapp",
+    userController.updateWhatsapp
+);
+
+
+router.put(
+    "/update-mobile",
+    userController.updateMobile
+);
+
+
 router.post(
     "/whatsapp-order-data",
     userController.getWhatsAppOrderData

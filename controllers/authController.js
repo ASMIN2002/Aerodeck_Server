@@ -1,707 +1,250 @@
 const pool = require("../config/db");
 const crypto = require("crypto");
-const pendingRegistrations = new Map();
-const pendingLoginOtps = new Map();
+const { sendEmailOtp } = require("../services/emailService");
 
-exports.register = async (req, res) => {
+const pendingOtps = new Map();
+
+function generateSessionToken() {
+    return crypto.randomBytes(32).toString("hex");
+}
+
+function generateOtp() {
+    return crypto.randomInt(100000, 1000000).toString();
+}
+
+
+exports.sendOtp = async (req, res) => {
     try {
+        const { email } = req.body;
 
-        const {
-            full_name,
-            mobile_number
-        } = req.body;
-
-        if (!full_name || !mobile_number) {
-
-            return res.json({
+        if (!email) {
+            return res.status(400).json({
                 success: false,
-                message: "Full name and mobile number are required."
+                message: "Email is required."
             });
-
         }
 
-        if (!/^[A-Za-z ]+$/.test(full_name)) {
+        const cleanEmail = email.trim().toLowerCase();
 
-            return res.json({
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailRegex.test(cleanEmail)) {
+            return res.status(400).json({
                 success: false,
-                message: "Full name must contain only letters."
+                message: "Please enter a valid email address."
             });
-
         }
 
-        if (!/^\d{10}$/.test(mobile_number)) {
+        const otp = generateOtp();
+        const otpExpiresAt = Date.now() + (5 * 60 * 1000);
 
-            return res.json({
-                success: false,
-                message: "Mobile number must be exactly 10 digits."
-            });
-
-        }
-
-        // Check if mobile number is already registered
-        const [existingUser] = await pool.query(
-            `SELECT
-                user_id,
-                is_mobile_verified
-             FROM User_Aerodeck
-             WHERE mobile_number = ?
-             LIMIT 1`,
-            [mobile_number]
-        );
-
-        if (existingUser.length > 0) {
-
-            return res.json({
-                success: false,
-                message: "This mobile number is already registered."
-            });
-
-        }
-
-        // Generate OTP
-        const otp =
-            crypto.randomInt(100000, 1000000).toString();
-
-        const otpExpiresAt =
-            Date.now() + (5 * 60 * 1000);
-
-        // Store registration temporarily in server memory
-        pendingRegistrations.set(
-            mobile_number,
-            {
-                full_name,
-                mobile_number,
-                otp,
-                otpExpiresAt
-            }
-        );
-
-        // Send OTP through Founder SMS device
-        const io = req.app.get("io");
-
-        // ✅ NAYA MESSAGE — HEEPIT OTP
-        const otpMessage = `HEEPIT OTP ${otp}. Do not give to anyone, keep it secret.`;
-
-        console.log("REGISTER OTP SMS COMMAND:", {
-            phoneNumber: mobile_number,
-            otp: otp,
-            message: otpMessage
+        pendingOtps.set(cleanEmail, {
+            email: cleanEmail,
+            otp,
+            otpExpiresAt
         });
 
-        if (io) {
-            // ✅ Sirf primary device ko bhejo (duplicate rokne ke liye)
-            io.to("sms_primary").emit(
-                "send_otp_to_primary_device",
-                {
-                    phoneNumber: mobile_number,
-                    message: otpMessage
-                }
-            );
+        try {
+            await sendEmailOtp(cleanEmail, otp);
+        } catch (emailErr) {
+            console.error("EMAIL SEND ERROR:", emailErr);
+            pendingOtps.delete(cleanEmail);
+            return res.status(500).json({
+                success: false,
+                message: "Failed to send OTP. Please try again."
+            });
         }
 
         return res.json({
             success: true,
-            message: "OTP sent successfully."
+            message: "OTP sent to your email."
         });
 
-    }
-
-    catch (err) {
-
-        console.error(err);
-
+    } catch (err) {
+        console.error("SEND OTP ERROR:", err);
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
-exports.verifyRegisterOtp = async (req, res) => {
 
+exports.verifyOtp = async (req, res) => {
     try {
+        const { email, otp } = req.body;
 
-        const {
-            mobile_number,
-            otp
-        } = req.body;
-
-        if (!mobile_number || !otp) {
-
-            return res.json({
+        if (!email || !otp) {
+            return res.status(400).json({
                 success: false,
-                message: "Mobile number and OTP are required."
+                message: "Email and OTP are required."
             });
-
         }
-        const pending =
-            pendingRegistrations.get(mobile_number);
+
+        const cleanEmail = email.trim().toLowerCase();
+
+        const pending = pendingOtps.get(cleanEmail);
 
         if (!pending) {
-
-            return res.json({
-                success: false,
-                message: "Registration OTP not found or expired."
-            });
-
-        }
-
-        // Check OTP expiry
-        if (Date.now() > pending.otpExpiresAt) {
-
-            pendingRegistrations.delete(mobile_number);
-
-            return res.json({
-                success: false,
-                message: "OTP expired. Please register again."
-            });
-
-        }
-
-        // Check OTP
-        if (pending.otp !== otp) {
-
-            return res.json({
-                success: false,
-                message: "Invalid OTP."
-            });
-
-        }
-        const [existingUser] = await pool.query(
-            `SELECT user_id
-             FROM User_Aerodeck
-             WHERE mobile_number = ?
-             LIMIT 1`,
-            [mobile_number]
-        );
-
-        if (existingUser.length > 0) {
-
-            pendingRegistrations.delete(mobile_number);
-
-            return res.json({
-                success: false,
-                message: "This mobile number is already registered."
-            });
-
-        }
-
-        // OTP verified successfully
-        // NOW create the user
-        const [result] = await pool.query(
-            `INSERT INTO User_Aerodeck
-            (
-                full_name,
-                mobile_number,
-                email,
-                is_mobile_verified,
-                is_email_verified
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                NULL,
-                1,
-                0
-            )`,
-            [
-                pending.full_name,
-                pending.mobile_number
-            ]
-        );
-
-        const userId = result.insertId;
-
-        /* ============================================
-           USER_REWARDS INSERT — Promo code generate
-        ============================================ */
-
-        const [lastReward] = await pool.query(
-            `SELECT promo_code FROM USER_REWARDS
-             WHERE promo_code LIKE 'HE%HY'
-             ORDER BY id DESC LIMIT 1`
-        );
-
-        let nextNumber = 1;
-
-        if (lastReward.length > 0 && lastReward[0].promo_code) {
-            const match = lastReward[0].promo_code.match(/HE(\d{4})HY/);
-            if (match) {
-                nextNumber = parseInt(match[1]) + 1;
-            }
-        }
-
-        const promo_code = `HE${String(nextNumber).padStart(4, "0")}HY`;
-
-        await pool.query(
-            `INSERT INTO USER_REWARDS
-             (user_id, hypo_points, redeemed, promo_code, count)
-             VALUES (?, ?, ?, ?, ?)`,
-            [userId, 10, 0, promo_code, 0]
-        );
-
-        const [versionRows] = await pool.query(
-            `SELECT version
-             FROM aerodeck_versions
-             ORDER BY id DESC
-             LIMIT 1`
-        );
-
-        console.log("VERSION ROWS:", versionRows);
-
-        const currentVersion = versionRows[0]?.version;
-
-        console.log("CURRENT APP VERSION:", currentVersion);
-
-        if (!currentVersion) {
-            throw new Error("Latest app version not found.");
-        }
-
-        const [downloadResult] = await pool.query(
-            `INSERT INTO DownloadApp
-             (user_id, update_version)
-             VALUES (?, ?)`,
-            [userId, currentVersion]
-        );
-
-        console.log("DownloadApp INSERT RESULT:", downloadResult);
-
-        pendingRegistrations.delete(mobile_number);
-
-        // Create session
-        const sessionToken =
-            crypto.randomBytes(32).toString("hex");
-
-        await pool.query(
-            `INSERT INTO User_Session_Aerodeck
-            (
-                user_id,
-                session_token,
-                is_active
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                1
-            )`,
-            [
-                userId,
-                sessionToken
-            ]
-        );
-
-        return res.json({
-
-            success: true,
-
-            session_token: sessionToken,
-
-            user: {
-                user_id: userId,
-                full_name: pending.full_name,
-                mobile_number: pending.mobile_number,
-                email: null,
-                is_mobile_verified: 1,
-                is_email_verified: 0
-            }
-
-        });
-
-    }
-
-    catch (err) {
-
-        console.error(err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
-    }
-
-};
-
-exports.login = async (req, res) => {
-    try {
-
-        const { mobile_number } = req.body;
-
-        if (!mobile_number) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Mobile number is required."
-
-            });
-
-        }
-
-        if (!/^\d{10}$/.test(mobile_number)) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Invalid mobile number."
-
-            });
-
-        }
-
-        const [users] = await pool.query(
-
-            `SELECT
-                user_id,
-                full_name,
-                mobile_number,
-                is_mobile_verified
-             FROM User_Aerodeck
-             WHERE mobile_number = ?`,
-
-            [mobile_number]
-
-        );
-
-        if (users.length === 0) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Account does not exist."
-
-            });
-
-        }
-
-        const user = users[0];
-
-        const otp = crypto.randomInt(100000, 1000000).toString();
-
-        const otpExpiresAt =
-            Date.now() + (5 * 60 * 1000);
-
-        pendingLoginOtps.set(
-            mobile_number,
-            {
-                user_id: user.user_id,
-                mobile_number: user.mobile_number,
-                otp,
-                otpExpiresAt
-            }
-        );
-
-        const io = req.app.get("io");
-
-        // ✅ NAYA MESSAGE — HEEPIT OTP
-        const otpMessage = `HEEPIT OTP ${otp}. Do not give to anyone, keep it secret.`;
-
-        console.log("OTP SMS COMMAND:", {
-            phoneNumber: mobile_number,
-            otp: otp,
-            message: otpMessage
-        });
-
-        if (io) {
-            // ✅ Sirf primary device ko bhejo (duplicate rokne ke liye)
-            io.to("sms_primary").emit(
-                "send_otp_to_primary_device",
-                {
-                    phoneNumber: mobile_number,
-                    message: otpMessage
-                }
-            );
-        }
-
-        return res.json({
-            success: true,
-            message: "OTP sent successfully."
-        });
-
-    }
-
-    catch (err) {
-
-        console.error(err);
-
-        return res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
-};
-
-exports.verifyLoginOtp = async (req, res) => {
-
-    try {
-
-        const { mobile_number, otp } = req.body;
-
-        if (!mobile_number || !otp) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Mobile number and OTP are required."
-
-            });
-
-        }
-
-        const [users] = await pool.query(
-
-            `SELECT
-                user_id,
-                full_name,
-                mobile_number,
-                email,
-                profile_image,
-                profile_image_id,
-                is_mobile_verified,
-                is_email_verified
-            FROM User_Aerodeck
-            WHERE mobile_number = ?
-              AND is_mobile_verified = 1`,
-
-            [mobile_number]
-
-        );
-
-        if (users.length === 0) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Account not found."
-
-            });
-
-        }
-
-        const user = users[0];
-
-        const pending =
-            pendingLoginOtps.get(mobile_number);
-
-        if (!pending) {
-
-            return res.json({
+            return res.status(400).json({
                 success: false,
                 message: "OTP not found or expired."
             });
-
-        }
-
-        if (pending.user_id !== user.user_id) {
-
-            return res.json({
-                success: false,
-                message: "Invalid OTP."
-            });
-
         }
 
         if (Date.now() > pending.otpExpiresAt) {
-
-            pendingLoginOtps.delete(mobile_number);
-
-            return res.json({
+            pendingOtps.delete(cleanEmail);
+            return res.status(400).json({
                 success: false,
-                message: "OTP expired."
+                message: "OTP expired. Please try again."
             });
-
         }
 
-        if (pending.otp !== otp) {
-
-            return res.json({
+        if (pending.otp !== otp.trim()) {
+            return res.status(400).json({
                 success: false,
                 message: "Invalid OTP."
             });
-
         }
 
-        const sessionToken = crypto.randomBytes(32).toString("hex");
-
-        const [otpRows] = await pool.query(
-            `SELECT user_id
-             FROM User_OTP_Aerodeck
-             WHERE user_id = ?
-             LIMIT 1`,
-            [user.user_id]
+        let [users] = await pool.query(
+            `SELECT user_id, full_name, email, mobile_number, whatsapp_number,
+                    profile_image, profile_image_id,
+                    is_email_verified, is_mobile_verified, is_whatsapp_verified,
+                    created_at
+             FROM User_Aerodeck
+             WHERE email = ? LIMIT 1`,
+            [cleanEmail]
         );
 
-        if (otpRows.length > 0) {
+        let isNewUser = false;
+        let userId;
+
+        if (users.length === 0) {
+            isNewUser = true;
+
+            const [result] = await pool.query(
+                `INSERT INTO User_Aerodeck
+                 (email, is_email_verified)
+                 VALUES (?, 1)`,
+                [cleanEmail]
+            );
+
+            userId = result.insertId;
+
+            const [lastReward] = await pool.query(
+                `SELECT promo_code FROM USER_REWARDS
+                 WHERE promo_code LIKE 'HE%HY'
+                 ORDER BY id DESC LIMIT 1`
+            );
+
+            let nextNumber = 1;
+
+            if (lastReward.length > 0 && lastReward[0].promo_code) {
+                const match = lastReward[0].promo_code.match(/HE(\d{4})HY/);
+                if (match) {
+                    nextNumber = parseInt(match[1]) + 1;
+                }
+            }
+
+            const promo_code = `HE${String(nextNumber).padStart(4, "0")}HY`;
 
             await pool.query(
-                `UPDATE User_OTP_Aerodeck
-                 SET login_otp = ?,
-                     otp_expires_at = ?
-                 WHERE user_id = ?`,
-                [
-                    pending.otp,
-                    new Date(pending.otpExpiresAt),
-                    user.user_id
-                ]
+                `INSERT INTO USER_REWARDS
+                 (user_id, hypo_points, redeemed, promo_code, count)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [userId, 10, 0, promo_code, 0]
             );
+
+            const [versionRows] = await pool.query(
+                `SELECT version FROM aerodeck_versions ORDER BY id DESC LIMIT 1`
+            );
+
+            const currentVersion = versionRows[0]?.version;
+
+            if (currentVersion) {
+                await pool.query(
+                    `INSERT INTO DownloadApp (user_id, update_version) VALUES (?, ?)`,
+                    [userId, currentVersion]
+                );
+            }
+
+            const [newUsers] = await pool.query(
+                `SELECT user_id, full_name, email, mobile_number, whatsapp_number,
+                        profile_image, profile_image_id,
+                        is_email_verified, is_mobile_verified, is_whatsapp_verified,
+                        created_at
+                 FROM User_Aerodeck
+                 WHERE user_id = ? LIMIT 1`,
+                [userId]
+            );
+
+            users = newUsers;
 
         } else {
-
-            await pool.query(
-                `INSERT INTO User_OTP_Aerodeck
-                (
-                    user_id,
-                    login_otp,
-                    otp_expires_at
-                )
-                VALUES (?, ?, ?)`,
-                [
-                    user.user_id,
-                    pending.otp,
-                    new Date(pending.otpExpiresAt)
-                ]
-            );
-
+            userId = users[0].user_id;
         }
 
-        pendingLoginOtps.delete(mobile_number);
+        const user = users[0];
+
+        const sessionToken = generateSessionToken();
 
         await pool.query(
-            `UPDATE User_Session_Aerodeck
-             SET is_active = 0
-             WHERE user_id = ?`,
+            `UPDATE User_Session_Aerodeck SET is_active = 0 WHERE user_id = ?`,
             [user.user_id]
         );
 
-        const [sessionRows] = await pool.query(
-            `SELECT session_id
-             FROM User_Session_Aerodeck
-             WHERE user_id = ?
-             LIMIT 1`,
-            [user.user_id]
+        await pool.query(
+            `INSERT INTO User_Session_Aerodeck
+             (user_id, session_token, is_active, login_at, last_active_at)
+             VALUES (?, ?, 1, NOW(), NOW())`,
+            [user.user_id, sessionToken]
         );
 
-        if (sessionRows.length > 0) {
-
-            await pool.query(
-                `UPDATE User_Session_Aerodeck
-                 SET
-                     session_token = ?,
-                     login_at = CURRENT_TIMESTAMP,
-                     last_active_at = CURRENT_TIMESTAMP,
-                     is_active = 1
-                 WHERE user_id = ?`,
-                [
-                    sessionToken,
-                    user.user_id
-                ]
-            );
-
-        } else {
-
-            await pool.query(
-                `INSERT INTO User_Session_Aerodeck
-                (
-                    user_id,
-                    session_token,
-                    is_active
-                )
-                VALUES
-                (
-                    ?,
-                    ?,
-                    1
-                )`,
-                [
-                    user.user_id,
-                    sessionToken
-                ]
-            );
-
-        }
+        pendingOtps.delete(cleanEmail);
 
         return res.json({
             success: true,
+            is_new_user: isNewUser,
             session_token: sessionToken,
-            user: {
-                user_id: user.user_id,
-                full_name: user.full_name,
-                mobile_number: user.mobile_number,
-                email: user.email,
-                profile_image: user.profile_image,
-                profile_image_id: user.profile_image_id,
-                is_mobile_verified: user.is_mobile_verified,
-                is_email_verified: user.is_email_verified
-            }
+            user: user
         });
 
-    }
-
-    catch (err) {
-
-        console.error(err);
-
+    } catch (err) {
+        console.error("VERIFY OTP ERROR:", err);
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
-
     }
-
 };
 
+
 exports.checkSession = async (req, res) => {
-
     try {
-
         const sessionToken = req.body?.session_token;
 
         if (!sessionToken) {
-
             return res.json({
                 success: false,
                 authenticated: false
             });
-
         }
 
         const [sessionRows] = await pool.query(
-            `SELECT
-                session_id,
-                user_id,
-                last_active_at
+            `SELECT session_id, user_id
              FROM User_Session_Aerodeck
              WHERE session_token = ?
                AND is_active = 1
-               AND last_active_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
              LIMIT 1`,
             [sessionToken]
         );
 
         if (sessionRows.length === 0) {
-
             return res.json({
                 success: false,
                 authenticated: false
             });
-
         }
 
         await pool.query(
@@ -712,20 +255,20 @@ exports.checkSession = async (req, res) => {
         );
 
         const [userRows] = await pool.query(
-            `SELECT *
+            `SELECT user_id, full_name, email, mobile_number, whatsapp_number,
+                    profile_image, profile_image_id,
+                    is_email_verified, is_mobile_verified, is_whatsapp_verified,
+                    created_at
              FROM User_Aerodeck
-             WHERE user_id = ?
-             LIMIT 1`,
+             WHERE user_id = ? LIMIT 1`,
             [sessionRows[0].user_id]
         );
 
         if (userRows.length === 0) {
-
             return res.json({
                 success: false,
                 authenticated: false
             });
-
         }
 
         return res.json({
@@ -735,67 +278,41 @@ exports.checkSession = async (req, res) => {
         });
 
     } catch (err) {
-
-        console.error(err);
-
+        console.error("CHECK SESSION ERROR:", err);
         return res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
+
 exports.logout = async (req, res) => {
-
     try {
-
         const { session_token } = req.body;
 
         if (!session_token) {
-
-            return res.json({
-
+            return res.status(400).json({
                 success: false,
-
                 message: "Session token is required."
-
             });
-
         }
 
-        if (session_token) {
-
-            await pool.query(
-                `UPDATE User_Session_Aerodeck
-                 SET is_active = 0
-                 WHERE session_token = ?`,
-                [session_token]
-            );
-
-        }
+        await pool.query(
+            `UPDATE User_Session_Aerodeck SET is_active = 0 WHERE session_token = ?`,
+            [session_token]
+        );
 
         return res.json({
-
             success: true,
-
             message: "Logout successful."
-
         });
 
     } catch (err) {
-
-        console.error(err);
-
+        console.error("LOGOUT ERROR:", err);
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
-
     }
-
 };

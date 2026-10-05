@@ -1,22 +1,11 @@
 const { BrevoClient } = require("@getbrevo/brevo");
 
-console.log(
-    "BREVO KEY CHECK:",
-    !!process.env.BREVO_API_KEY,
-    "LENGTH:",
-    process.env.BREVO_API_KEY
-        ? process.env.BREVO_API_KEY.length
-        : 0
-);
-
 const brevo = new BrevoClient({
     apiKey: process.env.BREVO_API_KEY
 });
 
 
 async function sendEmailOtp(email, otp) {
-
-    console.log("BREVO EMAIL SEND START:", email);
 
     try {
 
@@ -68,7 +57,6 @@ async function sendEmailOtp(email, otp) {
             `
         });
 
-        console.log("BREVO EMAIL SENT:", result);
 
         return result;
 
