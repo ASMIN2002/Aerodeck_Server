@@ -12,11 +12,9 @@ function getPublicId(url) {
     let publicId = parts[1];
 
     publicId = publicId.replace(/^v\d+\//, "");
-
     publicId = publicId.replace(/\.[^/.]+$/, "");
 
     return publicId;
-
 }
 
 const addProduct = async (req, res) => {
@@ -24,7 +22,6 @@ const addProduct = async (req, res) => {
     try {
 
         const {
-
             product_name,
             product_category,
             product_description,
@@ -36,14 +33,18 @@ const addProduct = async (req, res) => {
             product_image2,
             product_image3,
             product_image4,
-            product_status
-
+            product_status,
+            material,
+            size,
+            printing,
+            delivery,
+            return_days,
+            posted_by
         } = req.body;
 
         const [result] = await db.query(
 
             `INSERT INTO Products_Aerodeck (
-
                 product_name,
                 product_category,
                 product_description,
@@ -57,12 +58,13 @@ const addProduct = async (req, res) => {
                 product_image4,
                 product_total_likes,
                 product_rating,
-                product_status
-
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                product_status,
+                posted_by,
+                updated_by,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
 
             [
-
                 product_name,
                 product_category,
                 product_description,
@@ -70,46 +72,61 @@ const addProduct = async (req, res) => {
                 product_discount_percentage,
                 product_highlight_text,
                 product_price,
-                product_image1,
-                product_image2,
-                product_image3,
-                product_image4,
+                product_image1 || "",
+                product_image2 || "",
+                product_image3 || "",
+                product_image4 || "",
                 0,
                 0,
-                product_status
-
+                product_status,
+                posted_by || null,
+                posted_by || null
             ]
 
         );
+
+        const newProductId = result.insertId;
+
         await db.query(
-            `INSERT INTO User_Product_Detail
-    (
-        product_id,
-        category,
-        material,
-        size,
-        printing,
-        delivery,
-        return_days,
-        video_link
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+
+            `INSERT INTO User_Product_Detail (
+                product_id,
+                category,
+                material,
+                size,
+                printing,
+                delivery,
+                return_days,
+                vdo1,
+                vdo1_url,
+                vdo2,
+                vdo2_url,
+                vdo3,
+                vdo3_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
             [
-                result.insertId,
-                product_category,
-                req.body.material,
-                req.body.size,
-                req.body.printing,
-                req.body.delivery,
-                req.body.return_days,
-                req.body.video_link
+                String(newProductId),
+                product_category || "",
+                material || "",
+                size || "",
+                printing || "",
+                delivery || "",
+                return_days === "" ? null : return_days,
+                "",
+                "",
+                "",
+                "",
+                "",
+                ""
             ]
+
         );
+
         return res.json({
-
             success: true,
+            product_id: newProductId,
             message: "Product Added Successfully"
-
         });
 
     }
@@ -119,21 +136,19 @@ const addProduct = async (req, res) => {
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
             message: err.message
-
         });
 
     }
 
 };
+
 const addOffer = async (req, res) => {
 
     try {
 
         const {
-
             offer_name,
             offer_description,
             offer_demo_price,
@@ -145,13 +160,11 @@ const addOffer = async (req, res) => {
             offer_image3,
             offer_status,
             offer_expired_at
-
         } = req.body;
 
         await db.query(
 
             `INSERT INTO Products_Offer_Aerodeck (
-
                 offer_name,
                 offer_description,
                 offer_demo_price,
@@ -163,33 +176,27 @@ const addOffer = async (req, res) => {
                 offer_image3,
                 offer_status,
                 offer_expired_at
-
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             [
-
                 offer_name,
                 offer_description,
                 offer_demo_price,
                 offer_discount_percentage,
                 offer_highlight_text,
                 offer_price,
-                offer_image1,
-                offer_image2,
-                offer_image3,
+                offer_image1 || "",
+                offer_image2 || "",
+                offer_image3 || "",
                 offer_status,
                 offer_expired_at
-
             ]
 
         );
 
         return res.json({
-
             success: true,
-
             message: "Offer Added Successfully"
-
         });
 
     }
@@ -199,11 +206,8 @@ const addOffer = async (req, res) => {
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
 
     }
@@ -255,7 +259,6 @@ const updateProduct = async (req, res) => {
     try {
 
         const {
-
             product_id,
             product_name,
             product_category,
@@ -273,31 +276,33 @@ const updateProduct = async (req, res) => {
             product_image2_public_id,
             product_image3_public_id,
             product_image4_public_id,
+
+            product_status,
+            updated_by,
+
             material,
             size,
             printing,
             delivery,
             return_days,
-            video_link,
 
-            product_status
+            vdo1,
+            vdo1_public_id,
+            vdo2,
+            vdo2_public_id,
+            vdo3,
+            vdo3_public_id
 
         } = req.body;
 
         const product_price = (
 
             Number(product_demo_price)
-
             -
-
             (
-
                 Number(product_demo_price)
-
                 *
-
                 Number(product_discount_percentage)
-
             ) / 100
 
         ).toFixed(2);
@@ -305,31 +310,34 @@ const updateProduct = async (req, res) => {
         await db.query(
 
             `UPDATE Products_Aerodeck
-SET
-    product_name = ?,
-    product_category = ?,
-    product_description = ?,
-    product_demo_price = ?,
-    product_discount_percentage = ?,
-    product_highlight_text = ?,
-    product_price = ?,
-    product_image1 = ?,
-product_image1_public_id = ?,
+             SET
+                product_name = ?,
+                product_category = ?,
+                product_description = ?,
+                product_demo_price = ?,
+                product_discount_percentage = ?,
+                product_highlight_text = ?,
+                product_price = ?,
 
-product_image2 = ?,
-product_image2_public_id = ?,
+                product_image1 = ?,
+                product_image1_public_id = ?,
 
-product_image3 = ?,
-product_image3_public_id = ?,
+                product_image2 = ?,
+                product_image2_public_id = ?,
 
-product_image4 = ?,
-product_image4_public_id = ?,
+                product_image3 = ?,
+                product_image3_public_id = ?,
 
-product_status = ?
-WHERE product_id = ?`,
+                product_image4 = ?,
+                product_image4_public_id = ?,
+
+                product_status = ?,
+                updated_by = ?,
+                updated_at = NOW()
+
+             WHERE product_id = ?`,
 
             [
-
                 product_name,
                 product_category,
                 product_description,
@@ -337,48 +345,58 @@ WHERE product_id = ?`,
                 product_discount_percentage,
                 product_highlight_text,
                 product_price,
-                product_image1,
-                product_image1_public_id,
 
-                product_image2,
-                product_image2_public_id,
+                product_image1 || "",
+                product_image1_public_id || "",
 
-                product_image3,
-                product_image3_public_id,
+                product_image2 || "",
+                product_image2_public_id || "",
 
-                product_image4,
-                product_image4_public_id,
+                product_image3 || "",
+                product_image3_public_id || "",
+
+                product_image4 || "",
+                product_image4_public_id || "",
 
                 product_status,
+                updated_by || null,
                 product_id
-
-
             ]
 
         );
 
-        await db.query(
+        const [detailResult] = await db.query(
 
             `UPDATE User_Product_Detail
-     SET
-        material = ?,
-        size = ?,
-        printing = ?,
-        delivery = ?,
-        return_days = ?,
-        video_link = ?
-     WHERE product_id = ?`,
+             SET
+                category = ?,
+                material = ?,
+                size = ?,
+                printing = ?,
+                delivery = ?,
+                return_days = ?,
+                vdo1 = ?,
+                vdo1_url = ?,
+                vdo2 = ?,
+                vdo2_url = ?,
+                vdo3 = ?,
+                vdo3_url = ?
+             WHERE product_id = ?`,
 
             [
-
-                material,
-                size,
-                printing,
-                delivery,
+                product_category || "",
+                material || "",
+                size || "",
+                printing || "",
+                delivery || "",
                 return_days === "" ? null : return_days,
-                video_link,
+                vdo1 || "",
+                vdo1_public_id || "",
+                vdo2 || "",
+                vdo2_public_id || "",
+                vdo3 || "",
+                vdo3_public_id || "",
                 String(product_id)
-
             ]
 
         );
@@ -387,28 +405,36 @@ WHERE product_id = ?`,
 
             await db.query(
 
-                `INSERT INTO User_Product_Detail
-        (
-            product_id,
-            material,
-            size,
-            printing,
-            delivery,
-            return_days,
-            video_link
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO User_Product_Detail (
+                    product_id,
+                    category,
+                    material,
+                    size,
+                    printing,
+                    delivery,
+                    return_days,
+                    vdo1,
+                    vdo1_url,
+                    vdo2,
+                    vdo2_url,
+                    vdo3,
+                    vdo3_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
                 [
-
                     String(product_id),
+                    product_category || "",
                     material || "",
                     size || "",
                     printing || "",
                     delivery || "",
                     return_days === "" ? null : return_days,
-                    video_link || ""
-
+                    vdo1 || "",
+                    vdo1_public_id || "",
+                    vdo2 || "",
+                    vdo2_public_id || "",
+                    vdo3 || "",
+                    vdo3_public_id || ""
                 ]
 
             );
@@ -416,10 +442,8 @@ WHERE product_id = ?`,
         }
 
         return res.json({
-
             success: true,
             message: "Product Updated Successfully"
-
         });
 
     }
@@ -429,51 +453,36 @@ WHERE product_id = ?`,
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
             message: err.message
-
         });
 
     }
 
 };
+
 const updateOfferStatus = async (req, res) => {
 
     try {
 
         const {
-
             offer_id,
-
             offer_status
-
         } = req.body;
 
         await db.query(
 
             `UPDATE Products_Offer_Aerodeck
-
              SET offer_status = ?
-
              WHERE offer_id = ?`,
 
-            [
-
-                offer_status,
-
-                offer_id
-
-            ]
+            [offer_status, offer_id]
 
         );
 
         return res.json({
-
             success: true,
-
             message: "Offer Status Updated"
-
         });
 
     }
@@ -483,16 +492,14 @@ const updateOfferStatus = async (req, res) => {
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
 
     }
 
 };
+
 const deleteOffer = async (req, res) => {
 
     try {
@@ -502,14 +509,11 @@ const deleteOffer = async (req, res) => {
         const [rows] = await db.query(
 
             `SELECT
-
                 offer_image1,
                 offer_image2,
                 offer_image3
-
-            FROM Products_Offer_Aerodeck
-
-            WHERE offer_id = ?`,
+             FROM Products_Offer_Aerodeck
+             WHERE offer_id = ?`,
 
             [id]
 
@@ -518,11 +522,8 @@ const deleteOffer = async (req, res) => {
         if (rows.length === 0) {
 
             return res.status(404).json({
-
                 success: false,
-
                 message: "Offer Not Found"
-
             });
 
         }
@@ -530,63 +531,25 @@ const deleteOffer = async (req, res) => {
         const offer = rows[0];
 
         if (offer.offer_image1) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(
-
-                    offer.offer_image1
-
-                )
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(offer.offer_image1));
         }
 
         if (offer.offer_image2) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(
-
-                    offer.offer_image2
-
-                )
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(offer.offer_image2));
         }
 
         if (offer.offer_image3) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(
-
-                    offer.offer_image3
-
-                )
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(offer.offer_image3));
         }
 
         await db.query(
-
-            `DELETE FROM Products_Offer_Aerodeck
-
-             WHERE offer_id = ?`,
-
+            "DELETE FROM Products_Offer_Aerodeck WHERE offer_id = ?",
             [id]
-
         );
 
         return res.json({
-
             success: true,
-
             message: "Offer Deleted Successfully"
-
         });
 
     }
@@ -596,11 +559,8 @@ const deleteOffer = async (req, res) => {
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
 
     }
@@ -616,12 +576,12 @@ const deleteProduct = async (req, res) => {
         const [rows] = await db.query(
 
             `SELECT
-        product_image1,
-        product_image2,
-        product_image3,
-         product_image4
-     FROM Products_Aerodeck
-     WHERE product_id = ?`,
+                product_image1,
+                product_image2,
+                product_image3,
+                product_image4
+             FROM Products_Aerodeck
+             WHERE product_id = ?`,
 
             [id]
 
@@ -630,61 +590,85 @@ const deleteProduct = async (req, res) => {
         if (rows.length === 0) {
 
             return res.status(404).json({
-
                 success: false,
-
                 message: "Product Not Found"
-
             });
 
         }
 
         const product = rows[0];
+
+        const [videoRows] = await db.query(
+
+            `SELECT
+                vdo1_url,
+                vdo2_url,
+                vdo3_url
+             FROM User_Product_Detail
+             WHERE product_id = ?`,
+
+            [String(id)]
+
+        );
+
         if (product.product_image1) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(product.product_image1)
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(product.product_image1));
         }
 
         if (product.product_image2) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(product.product_image2)
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(product.product_image2));
         }
 
         if (product.product_image3) {
-
-            await cloudinary.uploader.destroy(
-
-                getPublicId(product.product_image3)
-
-            );
-
+            await cloudinary.uploader.destroy(getPublicId(product.product_image3));
         }
 
         if (product.product_image4) {
+            await cloudinary.uploader.destroy(getPublicId(product.product_image4));
+        }
 
-            await cloudinary.uploader.destroy(
+        if (videoRows.length > 0) {
 
-                getPublicId(product.product_image4)
+            const v = videoRows[0];
 
-            );
+            if (v.vdo1_url) {
+                try {
+                    await cloudinary.uploader.destroy(
+                        v.vdo1_url,
+                        { resource_type: "video" }
+                    );
+                } catch (err) {
+                    console.log("vdo1 delete error:", err);
+                }
+            }
+
+            if (v.vdo2_url) {
+                try {
+                    await cloudinary.uploader.destroy(
+                        v.vdo2_url,
+                        { resource_type: "video" }
+                    );
+                } catch (err) {
+                    console.log("vdo2 delete error:", err);
+                }
+            }
+
+            if (v.vdo3_url) {
+                try {
+                    await cloudinary.uploader.destroy(
+                        v.vdo3_url,
+                        { resource_type: "video" }
+                    );
+                } catch (err) {
+                    console.log("vdo3 delete error:", err);
+                }
+            }
 
         }
+
         await db.query(
-
             "DELETE FROM Product_Likes_AERODECK WHERE product_id = ?",
-
             [id]
-
         );
 
         await db.query(
@@ -693,16 +677,18 @@ const deleteProduct = async (req, res) => {
         );
 
         await db.query(
+            "DELETE FROM User_Product_Detail WHERE product_id = ?",
+            [String(id)]
+        );
+
+        await db.query(
             "DELETE FROM Products_Aerodeck WHERE product_id = ?",
             [id]
         );
 
         return res.json({
-
             success: true,
-
             message: "Product Deleted"
-
         });
 
     }
@@ -712,11 +698,8 @@ const deleteProduct = async (req, res) => {
         console.log(err);
 
         return res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
 
     }

@@ -1,11 +1,6 @@
 const db = require("../config/db");
 const cloudinary = require("../config/cloudinary");
 
-
-// =====================================
-// ADD CATEGORY
-// =====================================
-
 const addCategory = async (req, res) => {
 
     try {
@@ -14,10 +9,6 @@ const addCategory = async (req, res) => {
             catname,
             category
         } = req.body;
-
-        // -----------------------------
-        // VALIDATION
-        // -----------------------------
 
         if (!catname || !category?.trim()) {
 
@@ -28,7 +19,9 @@ const addCategory = async (req, res) => {
 
         }
 
-        if (catname !== "SHOP" && catname !== "GIFT") {
+        const allowedTypes = ["SHOP", "GIFT", "FOOD", "CARDS", "MEDICAL"];
+
+        if (!allowedTypes.includes(catname)) {
 
             return res.status(400).json({
                 success: false,
@@ -45,11 +38,6 @@ const addCategory = async (req, res) => {
             });
 
         }
-
-
-        // -----------------------------
-        // CLOUDINARY UPLOAD
-        // -----------------------------
 
         const uploadResult = await new Promise(
             (resolve, reject) => {
@@ -76,14 +64,8 @@ const addCategory = async (req, res) => {
             }
         );
 
-
         const imageUrl = uploadResult.secure_url;
         const imageId = uploadResult.public_id;
-
-
-        // -----------------------------
-        // DATABASE INSERT
-        // -----------------------------
 
         const [result] = await db.query(
             `
@@ -103,11 +85,6 @@ const addCategory = async (req, res) => {
                 imageId
             ]
         );
-
-
-        // -----------------------------
-        // SUCCESS
-        // -----------------------------
 
         return res.status(201).json({
 
@@ -162,7 +139,6 @@ const getCategories = async (req, res) => {
             `
         );
 
-
         return res.json({
 
             success: true,
@@ -189,7 +165,6 @@ const getCategories = async (req, res) => {
     }
 
 };
-
 
 module.exports = {
 
