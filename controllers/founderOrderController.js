@@ -1,9 +1,7 @@
 const pool = require("../config/db");
 
 exports.getOrders = async (req, res) => {
-
     try {
-
         const [rows] = await pool.query(`
             SELECT *
             FROM Order_Items_Aerodeck
@@ -16,16 +14,12 @@ exports.getOrders = async (req, res) => {
         });
 
     } catch (err) {
-
         console.log(err);
-
         res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
 
 exports.getCancels = async (req, res) => {
@@ -50,12 +44,17 @@ exports.getCancels = async (req, res) => {
                 oi.total_price,
                 oi.order_id,
                 oi.order_status,
-                oi.category
+                oi.category,
+
+                s.posted_by
 
              FROM Cancel_Aerodeck c
 
              LEFT JOIN Order_Items_Aerodeck oi
-             ON c.order_item_id = oi.order_item_id
+                ON c.order_item_id = oi.order_item_id
+
+             LEFT JOIN Shop_Aerodeck s
+                ON c.product_id = s.shop_id
 
              ORDER BY c.cancel_id DESC`
         );
@@ -75,14 +74,9 @@ exports.getCancels = async (req, res) => {
 };
 
 exports.updateCancelStatus = async (req, res) => {
-
     try {
-
         const { cancel_id, cancel_status } = req.body;
 
-        /* ============================================
-           1. GET CANCEL RECORD
-           ============================================ */
         const [[cancelRow]] = await pool.query(
             `SELECT cancel_id, order_item_id, user_id
              FROM Cancel_Aerodeck
@@ -97,9 +91,6 @@ exports.updateCancelStatus = async (req, res) => {
             });
         }
 
-        /* ============================================
-           2. UPDATE CANCEL TABLE
-           ============================================ */
         await pool.query(
             `UPDATE Cancel_Aerodeck
              SET cancel_status = ?
@@ -107,9 +98,6 @@ exports.updateCancelStatus = async (req, res) => {
             [cancel_status, cancel_id]
         );
 
-        /* ============================================
-           3. UPDATE ITEM TABLE
-           ============================================ */
         await pool.query(
             `UPDATE Order_Items_Aerodeck
              SET order_status = ?
@@ -117,9 +105,6 @@ exports.updateCancelStatus = async (req, res) => {
             [cancel_status, cancelRow.order_item_id]
         );
 
-        /* ============================================
-           4. GET ORDER_ID
-           ============================================ */
         const [[itemRow]] = await pool.query(
             `SELECT order_id
              FROM Order_Items_Aerodeck
@@ -136,9 +121,6 @@ exports.updateCancelStatus = async (req, res) => {
 
         const order_id = itemRow.order_id;
 
-        /* ============================================
-           5. CHECK — saare items same status?
-           ============================================ */
         const [countRows] = await pool.query(
             `SELECT
                 COUNT(*) AS total,
@@ -151,9 +133,6 @@ exports.updateCancelStatus = async (req, res) => {
         const totalItems = Number(countRows[0].total || 0);
         const matchingItems = Number(countRows[0].matching || 0);
 
-        /* ============================================
-           6. UPDATE ORDER TABLE — agar saare items same
-           ============================================ */
         if (totalItems > 0 && totalItems === matchingItems) {
 
             await pool.query(
@@ -163,9 +142,6 @@ exports.updateCancelStatus = async (req, res) => {
                 [cancel_status, order_id]
             );
 
-            /* ============================================
-               7. REFUND HYPO POINTS — sirf CANCELLED pe
-               ============================================ */
             if (cancel_status === "CANCELLED") {
 
                 const [[orderRow]] = await pool.query(
@@ -202,13 +178,9 @@ exports.updateCancelStatus = async (req, res) => {
                              WHERE order_id = ?`,
                             [order_id]
                         );
-
                     }
-
                 }
-
             }
-
         }
 
         res.json({
@@ -218,25 +190,17 @@ exports.updateCancelStatus = async (req, res) => {
         });
 
     } catch (err) {
-
         console.log(err);
-
         res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
-
 };
+
 exports.updateOrderStatus = async (req, res) => {
-
     try {
-
-        const {
-            order_item_id,
-            order_status
-        } = req.body;
+        const { order_item_id, order_status } = req.body;
 
         const [[item]] = await pool.query(
             `SELECT product_id, order_id
@@ -260,7 +224,7 @@ exports.updateOrderStatus = async (req, res) => {
         );
 
         /* ============================================
-           STATS UPDATE — SHOP item DELIVERED hone pe
+           STATS + COMMISSION — SHOP item DELIVERED hone pe
            ============================================ */
         if (order_status === "DELIVERED") {
 
@@ -274,7 +238,8 @@ exports.updateOrderStatus = async (req, res) => {
             if (itemFull && itemFull.product_type === "SHOP") {
 
                 const [shopRows] = await pool.query(
-                    `SELECT posted_by FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
+                    `SELECT posted_by FROM Shop_Aerodeck 
+                     WHERE shop_id = ? LIMIT 1`,
                     [itemFull.product_id]
                 );
 
@@ -283,7 +248,8 @@ exports.updateOrderStatus = async (req, res) => {
                     const postedBy = shopRows[0].posted_by;
 
                     const [adminRows] = await pool.query(
-                        `SELECT id FROM heepitadmin WHERE username = ? LIMIT 1`,
+                        `SELECT id FROM heepitadmin 
+                         WHERE username = ? LIMIT 1`,
                         [postedBy]
                     );
 
@@ -293,78 +259,97 @@ exports.updateOrderStatus = async (req, res) => {
                         const sellAmount = Number(itemFull.total_price) || 0;
                         const commissionAmount = sellAmount * 0.10;
 
-                        /* ---- Current month short ---- */
-                        const monthNames = [
-                            "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-                            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
-                        ];
-                        const currentMonth =
-                            monthNames[new Date().getMonth()];
-
-                        /* ---- Get existing analysh ---- */
-                        const [[statsRow]] = await pool.query(
-                            `SELECT analysh FROM heepitadmin_stats
-                             WHERE admin_id = ?
-                             LIMIT 1`,
-                            [adminId]
+                        /* ---- Check — already inserted? ---- */
+                        const [existingComm] = await pool.query(
+                            `SELECT id FROM admin_comm 
+                             WHERE item_id = ? LIMIT 1`,
+                            [order_item_id]
                         );
 
-                        let analyshStr = statsRow?.analysh || "";
+                        const isNewEntry = existingComm.length === 0;
 
-                        /* ---- Update analysh ---- */
-                        const parts = analyshStr
-                            .split(",")
-                            .map((p) => p.trim())
-                            .filter(Boolean);
-
-                        const lastIdx = parts.length - 1;
-
-                        if (
-                            lastIdx >= 0 &&
-                            parts[lastIdx].startsWith(currentMonth + "~")
-                        ) {
-
-                            const oldVal =
-                                Number(parts[lastIdx].split("~")[1]) || 0;
-                            const newVal = oldVal + sellAmount;
-
-                            parts[lastIdx] = `${currentMonth}~${newVal}`;
-
-                        } else {
-
-                            parts.push(`${currentMonth}~${sellAmount}`);
-
+                        /* ---- Insert / Update admin_comm ---- */
+                        try {
+                            await pool.query(
+                                `INSERT INTO admin_comm
+                                 (admin_id, item_id, commission, status, created_at, updated_at)
+                                 VALUES (?, ?, ?, 0, NOW(), NOW())
+                                 ON DUPLICATE KEY UPDATE
+                                    commission = VALUES(commission),
+                                    updated_at = NOW()`,
+                                [adminId, order_item_id, commissionAmount]
+                            );
+                        } catch (commErr) {
+                            console.log("COMMISSION SAVE ERROR:", commErr);
                         }
 
-                        analyshStr = parts.join(",");
+                        /* ---- Stats update — sirf agar nayi entry hai ---- */
+                        if (isNewEntry) {
 
-                        /* ---- Update stats row ---- */
-                        await pool.query(
-                            `UPDATE heepitadmin_stats
-                             SET sells = sells + ?,
-                                 commission = commission + ?,
-                                 delivered = delivered + 1,
-                                 pending = GREATEST(pending - 1, 0),
-                                 analysh = ?
-                             WHERE admin_id = ?`,
-                            [
-                                sellAmount,
-                                commissionAmount,
-                                analyshStr,
-                                adminId
-                            ]
-                        );
+                            const monthNames = [
+                                "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                                "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+                            ];
+                            const currentMonth =
+                                monthNames[new Date().getMonth()];
 
+                            const [[statsRow]] = await pool.query(
+                                `SELECT analysh FROM heepitadmin_stats
+                                 WHERE admin_id = ?
+                                 LIMIT 1`,
+                                [adminId]
+                            );
+
+                            let analyshStr = statsRow?.analysh || "";
+
+                            const parts = analyshStr
+                                .split(",")
+                                .map((p) => p.trim())
+                                .filter(Boolean);
+
+                            const lastIdx = parts.length - 1;
+
+                            if (
+                                lastIdx >= 0 &&
+                                parts[lastIdx].startsWith(currentMonth + "~")
+                            ) {
+                                const oldVal =
+                                    Number(parts[lastIdx].split("~")[1]) || 0;
+                                const newVal = oldVal + sellAmount;
+
+                                parts[lastIdx] =
+                                    `${currentMonth}~${newVal}`;
+                            } else {
+                                parts.push(
+                                    `${currentMonth}~${sellAmount}`
+                                );
+                            }
+
+                            analyshStr = parts.join(",");
+
+                            await pool.query(
+                                `UPDATE heepitadmin_stats
+                                 SET sells = sells + ?,
+                                     commission = commission + ?,
+                                     delivered = delivered + 1,
+                                     pending = GREATEST(pending - 1, 0),
+                                     analysh = ?
+                                 WHERE admin_id = ?`,
+                                [
+                                    sellAmount,
+                                    commissionAmount,
+                                    analyshStr,
+                                    adminId
+                                ]
+                            );
+                        }
                     }
-
                 }
-
             }
-
         }
 
         /* ============================================
-           RETURN DATE LOGIC (existing)
+           RETURN DATE LOGIC
            ============================================ */
         if (
             order_status === "DELIVERED" &&
@@ -394,11 +379,10 @@ exports.updateOrderStatus = async (req, res) => {
                  WHERE order_item_id = ?`,
                 [returnDate, order_item_id]
             );
-
         }
 
         /* ============================================
-           ORDER STATUS UPDATE + REWARDS (existing)
+           ORDER STATUS UPDATE + REWARDS
            ============================================ */
         if (item.order_id) {
 
@@ -494,13 +478,9 @@ exports.updateOrderStatus = async (req, res) => {
                                      VALUES (?, 0, ?, 0, NOW())`,
                                     [userId, chances]
                                 );
-
                             }
-
                         }
-
                     }
-
                 }
 
             } else {
@@ -511,9 +491,7 @@ exports.updateOrderStatus = async (req, res) => {
                      WHERE order_id = ?`,
                     [item.order_id]
                 );
-
             }
-
         }
 
         res.json({
@@ -522,14 +500,112 @@ exports.updateOrderStatus = async (req, res) => {
         });
 
     } catch (err) {
-
         console.log(err);
-
         res.status(500).json({
             success: false,
             message: err.message
         });
-
     }
+};
 
+exports.getOrdersWithUser = async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                oi.*,
+                o.user_id,
+                o.address_id,
+                u.full_name AS customer_name,
+                u.mobile_number AS customer_mobile,
+                u.whatsapp_number AS customer_whatsapp,
+                u.email AS customer_email,
+                u.profile_image AS customer_image,
+                a.full_name AS address_name,
+                a.mobile_number AS address_mobile,
+                a.house_flat,
+                a.area_street,
+                a.landmark,
+                a.pincode,
+                a.city,
+                a.state,
+                a.latitude,
+                a.longitude,
+                a.address_type,
+                a.is_primary
+            FROM Order_Items_Aerodeck oi
+            LEFT JOIN Orders_Aerodeck o 
+                ON oi.order_id = o.order_id
+            LEFT JOIN User_Aerodeck u 
+                ON o.user_id = u.user_id
+            LEFT JOIN User_Address_Aerodeck a 
+                ON o.address_id = a.address_id
+            WHERE oi.product_type = 'SHOP'
+            ORDER BY oi.order_item_id DESC
+        `);
+
+        res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+exports.getAdminCommissions = async (req, res) => {
+    try {
+        const { admin_id } = req.params;
+
+        if (!admin_id) {
+            return res.status(400).json({
+                success: false,
+                message: "admin_id is required."
+            });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT
+                ac.id,
+                ac.admin_id,
+                ac.item_id,
+                ac.commission,
+                ac.status,
+                ac.created_at,
+                ac.updated_at,
+
+                oi.product_name,
+                oi.product_id,
+                oi.category,
+                oi.quantity,
+                oi.total_price,
+                oi.order_id,
+                oi.order_status
+
+             FROM admin_comm ac
+
+             LEFT JOIN Order_Items_Aerodeck oi
+                ON ac.item_id = oi.order_item_id
+
+             WHERE ac.admin_id = ?
+
+             ORDER BY ac.id DESC`,
+            [admin_id]
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.error("GET ADMIN COMMISSIONS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
 };

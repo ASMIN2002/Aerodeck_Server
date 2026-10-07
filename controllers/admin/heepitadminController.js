@@ -1,10 +1,6 @@
-// server/controllers/admin/heepitadminController.js
 const db = require("../../config/db");
 const crypto = require("crypto");
 
-/* ============================================
-   ADMIN LOGIN
-   ============================================ */
 exports.adminLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -17,12 +13,10 @@ exports.adminLogin = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      `
-      SELECT id, name, username, password, section
-      FROM heepitadmin
-      WHERE username = ?
-      LIMIT 1
-      `,
+      `SELECT id, name, username, password, section
+             FROM heepitadmin
+             WHERE username = ?
+             LIMIT 1`,
       [username.trim()]
     );
 
@@ -43,6 +37,13 @@ exports.adminLogin = async (req, res) => {
     }
 
     const session_token = crypto.randomBytes(32).toString("hex");
+
+    await db.query(
+      `UPDATE heepitadmin
+             SET session_token = ?, last_login = NOW()
+             WHERE id = ?`,
+      [session_token, admin.id]
+    );
 
     return res.json({
       success: true,
@@ -65,9 +66,45 @@ exports.adminLogin = async (req, res) => {
   }
 };
 
-/* ============================================
-   SET SECTION (only if NULL)
-   ============================================ */
+exports.getProfileByToken = async (req, res) => {
+  try {
+    const { session_token } = req.body;
+
+    if (!session_token) {
+      return res.status(401).json({
+        success: false,
+        message: "Session token required."
+      });
+    }
+
+    const [[admin]] = await db.query(
+      `SELECT id, name, username, section
+             FROM heepitadmin
+             WHERE session_token = ? LIMIT 1`,
+      [session_token]
+    );
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid session."
+      });
+    }
+
+    return res.json({
+      success: true,
+      admin
+    });
+
+  } catch (err) {
+    console.error("GET PROFILE ERROR:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error."
+    });
+  }
+};
+
 exports.setSection = async (req, res) => {
   try {
     const { admin_id, section } = req.body;
@@ -79,9 +116,10 @@ exports.setSection = async (req, res) => {
       });
     }
 
+    const baseType = section.replace(/^EDIT--/, "").split("~")[0];
     const allowed = ["SHOP", "CARDS", "FOOD", "MEDICAL", "GIFTS"];
 
-    if (!allowed.includes(section)) {
+    if (!allowed.includes(baseType)) {
       return res.status(400).json({
         success: false,
         message: "Invalid section."
@@ -89,11 +127,9 @@ exports.setSection = async (req, res) => {
     }
 
     const [result] = await db.query(
-      `
-      UPDATE heepitadmin
-      SET section = ?
-      WHERE id = ? AND section IS NULL
-      `,
+      `UPDATE heepitadmin
+             SET section = ?
+             WHERE id = ? AND section IS NULL`,
       [section, admin_id]
     );
 
@@ -119,9 +155,6 @@ exports.setSection = async (req, res) => {
   }
 };
 
-/* ============================================
-   UPDATE NAME
-   ============================================ */
 exports.updateName = async (req, res) => {
   try {
     const { admin_id, name } = req.body;
@@ -134,11 +167,9 @@ exports.updateName = async (req, res) => {
     }
 
     const [result] = await db.query(
-      `
-      UPDATE heepitadmin
-      SET name = ?
-      WHERE id = ?
-      `,
+      `UPDATE heepitadmin
+             SET name = ?
+             WHERE id = ?`,
       [name.trim(), admin_id]
     );
 
@@ -163,9 +194,7 @@ exports.updateName = async (req, res) => {
     });
   }
 };
-/* ============================================
-   GET CATEGORIES BY TYPE
-   ============================================ */
+
 exports.getCategoriesByType = async (req, res) => {
   try {
     const { type } = req.query;
@@ -178,12 +207,10 @@ exports.getCategoriesByType = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      `
-      SELECT catid, category AS catname
-      FROM ALL_Category
-      WHERE catname = ?
-      ORDER BY category ASC
-      `,
+      `SELECT catid, category AS catname
+             FROM ALL_Category
+             WHERE catname = ?
+             ORDER BY category ASC`,
       [type]
     );
 
@@ -213,11 +240,9 @@ exports.updateSection = async (req, res) => {
     }
 
     const [result] = await db.query(
-      `
-      UPDATE heepitadmin
-      SET section = ?
-      WHERE id = ?
-      `,
+      `UPDATE heepitadmin
+             SET section = ?
+             WHERE id = ?`,
       [section, admin_id]
     );
 
@@ -255,21 +280,19 @@ exports.getAdminStats = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      `
-      SELECT
-        likes,
-        ratings,
-        sells,
-        pending,
-        delivered,
-        commission,
-        analysh,
-        created_at
-      FROM heepitadmin_stats
-      WHERE admin_id = ?
-      ORDER BY id DESC
-      LIMIT 1
-      `,
+      `SELECT
+                likes,
+                ratings,
+                sells,
+                pending,
+                delivered,
+                commission,
+                analysh,
+                created_at
+             FROM heepitadmin_stats
+             WHERE admin_id = ?
+             ORDER BY id DESC
+             LIMIT 1`,
       [admin_id]
     );
 
@@ -314,7 +337,6 @@ exports.getAdminStatsRealtime = async (req, res) => {
       });
     }
 
-    /* ---- Admin ka username nikalo ---- */
     const [[adminRow]] = await db.query(
       `SELECT username FROM heepitadmin WHERE id = ? LIMIT 1`,
       [admin_id]
@@ -329,29 +351,27 @@ exports.getAdminStatsRealtime = async (req, res) => {
 
     const adminUsername = adminRow.username;
 
-    /* ---- Shop_Aerodeck se likes & ratings ---- */
     const [[shopAgg]] = await db.query(
       `SELECT
-         COALESCE(SUM(shop_total_likes), 0) AS total_likes,
-         COALESCE(AVG(shop_rating), 0) AS avg_rating
-       FROM Shop_Aerodeck
-       WHERE posted_by = ?`,
+                COALESCE(SUM(shop_total_likes), 0) AS total_likes,
+                COALESCE(AVG(shop_rating), 0) AS avg_rating
+             FROM Shop_Aerodeck
+             WHERE posted_by = ?`,
       [adminUsername]
     );
 
-    /* ---- heepitadmin_stats se baaki ---- */
     const [[statsRow]] = await db.query(
       `SELECT
-         sells,
-         pending,
-         delivered,
-         commission,
-         analysh,
-         created_at
-       FROM heepitadmin_stats
-       WHERE admin_id = ?
-       ORDER BY id DESC
-       LIMIT 1`,
+                sells,
+                pending,
+                delivered,
+                commission,
+                analysh,
+                created_at
+             FROM heepitadmin_stats
+             WHERE admin_id = ?
+             ORDER BY id DESC
+             LIMIT 1`,
       [admin_id]
     );
 

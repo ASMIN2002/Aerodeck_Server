@@ -93,7 +93,6 @@ exports.updateName = async (req, res) => {
     }
 };
 
-
 exports.updateWhatsapp = async (req, res) => {
     try {
         const { session_token, whatsapp_number } = req.body;
@@ -121,17 +120,19 @@ exports.updateWhatsapp = async (req, res) => {
             });
         }
 
-        const [existing] = await db.query(
-            `SELECT user_id FROM User_Aerodeck
-             WHERE whatsapp_number = ? AND user_id != ?
-             LIMIT 1`,
-            [whatsapp_number, user_id]
+        const [countRows] = await db.query(
+            `SELECT COUNT(*) AS total 
+             FROM User_Aerodeck
+             WHERE whatsapp_number = ?`,
+            [whatsapp_number]
         );
 
-        if (existing.length > 0) {
+        const existingCount = Number(countRows[0].total || 0);
+
+        if (existingCount >= 4) {
             return res.status(409).json({
                 success: false,
-                message: "This WhatsApp number is already registered."
+                message: "This WhatsApp number is already registered in 4 accounts."
             });
         }
 
@@ -191,17 +192,19 @@ exports.updateMobile = async (req, res) => {
             });
         }
 
-        const [existing] = await db.query(
-            `SELECT user_id FROM User_Aerodeck
-             WHERE mobile_number = ? AND user_id != ?
-             LIMIT 1`,
-            [mobile_number, user_id]
+        const [countRows] = await db.query(
+            `SELECT COUNT(*) AS total 
+             FROM User_Aerodeck
+             WHERE mobile_number = ?`,
+            [mobile_number]
         );
 
-        if (existing.length > 0) {
+        const existingCount = Number(countRows[0].total || 0);
+
+        if (existingCount >= 4) {
             return res.status(409).json({
                 success: false,
-                message: "This mobile number is already registered."
+                message: "This mobile number is already registered in 4 accounts."
             });
         }
 
@@ -490,8 +493,6 @@ exports.getAllNotifications = async (req, res) => {
         });
     }
 };
-
-
 exports.insertNotification = async (req, res) => {
     try {
         const { notification } = req.body;
@@ -531,8 +532,6 @@ exports.insertNotification = async (req, res) => {
         });
     }
 };
-
-
 exports.toggleNotificationStatus = async (req, res) => {
     try {
         const { id, status } = req.body;
@@ -556,6 +555,62 @@ exports.toggleNotificationStatus = async (req, res) => {
 
     } catch (err) {
         console.error("NOTIF STATUS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+exports.getUserDetails = async (req, res) => {
+    try {
+        const { session_token } = req.query;
+
+        if (!session_token) {
+            return res.status(400).json({
+                success: false,
+                message: "Session token required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        const [rows] = await db.query(
+            `SELECT 
+                user_id,
+                full_name,
+                mobile_number,
+                whatsapp_number,
+                is_whatsapp_verified,
+                is_mobile_verified,
+                email,
+                is_email_verified,
+                profile_image
+             FROM User_Aerodeck
+             WHERE user_id = ? LIMIT 1`,
+            [user_id]
+        );
+
+        if (!rows.length) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            data: rows[0]
+        });
+
+    } catch (err) {
+        console.error(err);
         return res.status(500).json({
             success: false,
             message: err.message

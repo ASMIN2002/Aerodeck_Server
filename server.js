@@ -47,7 +47,6 @@ const httpServer = http.createServer(app);
 
 
 // ADMIN
-const adminLoginRoutes = require("./routes/admin/adminLoginRoutes");
 const heepitadminRoutes = require("./routes/admin/heepitadminRoutes");
 
 
@@ -135,6 +134,7 @@ app.use(helmet());
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://localhost:5175",
     "https://localhost",
     "http://localhost:3000",
     "https://heepit.netlify.app",
@@ -198,7 +198,6 @@ app.use("/api/user", userRewardsRoutes);
 
 
 // ADMIN ROUTES
-app.use("/api/admin", adminLoginRoutes);
 app.use("/api/admin", heepitadminRoutes);
 
 
@@ -549,38 +548,7 @@ app.put("/api/founder/profile-image", async (req, res) => {
 
 });
 
-app.get("/api/users", async (req, res) => {
-    try {
 
-        const [rows] = await pool.query(`
-            SELECT
-                user_id,
-                full_name,
-                mobile_number,
-                email,
-                is_mobile_verified,
-                is_email_verified,
-                created_at
-            FROM User_Aerodeck
-            ORDER BY user_id DESC
-        `);
-
-        res.json({
-            success: true,
-            data: rows
-        });
-
-    } catch (err) {
-
-        console.error(err);
-
-        res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
-    }
-});
 app.get("/api/offers/count", async (req, res) => {
 
     try {
