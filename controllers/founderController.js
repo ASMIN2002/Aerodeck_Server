@@ -356,3 +356,70 @@ exports.verifyUserField = async (req, res) => {
         });
     }
 };
+/* ============================================
+   ALLOW ADMIN — EDIT-- prefix add karo
+   ============================================ */
+exports.allowAdmin = async (req, res) => {
+    try {
+        const { username } = req.body;
+
+        if (!username || !username.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Username required."
+            });
+        }
+
+        /* Admin dhundo */
+        const [[admin]] = await pool.query(
+            `SELECT id, username, section
+             FROM heepitadmin
+             WHERE username = ?
+             LIMIT 1`,
+            [username.trim()]
+        );
+
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: "Not available."
+            });
+        }
+
+        /* Agar already EDIT-- hai toh skip */
+        const currentSection = admin.section || "";
+
+        if (currentSection.startsWith("EDIT--")) {
+            return res.json({
+                success: true,
+                message: "Already allowed.",
+                section: currentSection
+            });
+        }
+
+        /* EDIT-- prefix add karo */
+        const newSection = currentSection
+            ? `EDIT--${currentSection}`
+            : `EDIT--`;
+
+        await pool.query(
+            `UPDATE heepitadmin
+             SET section = ?
+             WHERE id = ?`,
+            [newSection, admin.id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Allowed successfully.",
+            section: newSection
+        });
+
+    } catch (err) {
+        console.error("ALLOW ADMIN ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

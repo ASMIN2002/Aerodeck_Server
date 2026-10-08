@@ -1155,9 +1155,6 @@ exports.getUserInfoForAdmin = async (req, res) => {
     }
 };
 
-/* ============================================
-   ADMIN PLACE ORDER
-   ============================================ */
 exports.adminPlaceOrder = async (req, res) => {
     try {
         const {

@@ -609,3 +609,88 @@ exports.getAdminCommissions = async (req, res) => {
         });
     }
 };
+/* ============================================
+   GET ALL COMMISSIONS (Founder)
+   ============================================ */
+exports.getAllCommissions = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT
+                ac.id,
+                ac.admin_id,
+                ac.item_id,
+                ac.commission,
+                ac.status,
+                ac.created_at,
+                ac.updated_at,
+
+                oi.product_name,
+                oi.product_id,
+                oi.category,
+                oi.quantity,
+                oi.total_price,
+                oi.order_id,
+                oi.order_status,
+
+                ha.username AS admin_username,
+                ha.name AS admin_name
+
+             FROM admin_comm ac
+
+             LEFT JOIN Order_Items_Aerodeck oi
+                ON ac.item_id = oi.order_item_id
+
+             LEFT JOIN heepitadmin ha
+                ON ac.admin_id = ha.id
+
+             ORDER BY ac.id DESC`
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.error("GET ALL COMMISSIONS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   UPDATE COMMISSION STATUS (Founder)
+   ============================================ */
+exports.updateCommissionStatus = async (req, res) => {
+    try {
+        const { id, status } = req.body;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "id required."
+            });
+        }
+
+        await pool.query(
+            `UPDATE admin_comm
+             SET status = ?, updated_at = NOW()
+             WHERE id = ?`,
+            [status ? 1 : 0, id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Status updated."
+        });
+
+    } catch (err) {
+        console.error("UPDATE COMMISSION STATUS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
