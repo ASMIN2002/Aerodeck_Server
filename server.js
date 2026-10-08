@@ -139,7 +139,8 @@ const allowedOrigins = [
     "http://localhost:3000",
     "https://heepit.netlify.app",
     "https://adminheepit.netlify.app",
-    "https://heepitfounder.netlify.app"
+    "https://heepitfounder.netlify.app",
+    "https://heepituniqueusersmustvalue.netlify.app"
 ];
 app.use(cors({
     origin(origin, callback) {
