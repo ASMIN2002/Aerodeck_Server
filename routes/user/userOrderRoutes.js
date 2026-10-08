@@ -11,7 +11,9 @@ const {
     getCancelStatus,
     updateReturnDate,
     returnProduct,
-    cancelWholeOrder
+    cancelWholeOrder,
+    getUserInfoForAdmin,
+    adminPlaceOrder
 
 } = require("../../controllers/user/userOrderController");
 
@@ -24,5 +26,7 @@ router.post("/cancel-order", cancelOrder);
 router.post("/update-return-date", updateReturnDate);
 router.post("/return-product", returnProduct);
 router.post("/cancel-whole-order", cancelWholeOrder);
+router.get("/admin/user-info/:user_id", getUserInfoForAdmin);
+router.post("/admin/place-order", adminPlaceOrder);
 
 module.exports = router;

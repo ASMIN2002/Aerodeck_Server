@@ -1103,3 +1103,196 @@ exports.cancelWholeOrder = async (req, res) => {
     }
 
 };
+/* ============================================
+   GET USER INFO + ALL ADDRESSES (Admin)
+   ============================================ */
+exports.getUserInfoForAdmin = async (req, res) => {
+    try {
+        const { user_id } = req.params;
+
+        if (!user_id) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id required."
+            });
+        }
+
+        /* User info */
+        const [[user]] = await pool.query(
+            `SELECT user_id, full_name, mobile_number, whatsapp_number, email
+             FROM User_Aerodeck
+             WHERE user_id = ? LIMIT 1`,
+            [user_id]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        /* All addresses */
+        const [addresses] = await pool.query(
+            `SELECT * FROM User_Address_Aerodeck
+             WHERE user_id = ?
+             ORDER BY is_primary DESC, address_id ASC`,
+            [user_id]
+        );
+
+        return res.json({
+            success: true,
+            user,
+            addresses
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   ADMIN PLACE ORDER
+   ============================================ */
+exports.adminPlaceOrder = async (req, res) => {
+    try {
+        const {
+            user_id,
+            address_id,
+            product_id,
+            quantity,
+            unit_price,
+            making_charges,
+            payment_method,
+            payment_status,
+            advance_amount
+        } = req.body;
+
+        if (!user_id || !address_id || !product_id || !quantity) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id, address_id, product_id and quantity are required."
+            });
+        }
+
+        /* Product fetch */
+        const [[product]] = await pool.query(
+            `SELECT * FROM Products_Aerodeck
+             WHERE product_id = ? LIMIT 1`,
+            [product_id]
+        );
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found."
+            });
+        }
+
+        const qty = Number(quantity);
+        const price = Number(unit_price) || Number(product.product_price) || 0;
+        const making = Number(making_charges) || 0;
+
+        const itemTotal = (price * qty) + making;
+        const subtotal = itemTotal;
+        const platformFee = 0;
+        const gst = 0;
+        const deliveryFee = 0;
+        const totalAmount = subtotal + platformFee + gst + deliveryFee;
+
+        /* Advance / remaining */
+        const advance = Number(advance_amount) || 0;
+        const remaining = Math.max(0, totalAmount - advance);
+
+        /* Payment status */
+        let finalPaymentStatus = payment_status || "PENDING";
+        if (payment_status === "PAID") {
+            finalPaymentStatus = "PAID";
+        } else if (payment_status === "PARTIAL") {
+            finalPaymentStatus = "PARTIAL";
+        }
+
+        const orderNumber = "AD" + Date.now();
+
+        /* 1. Insert order */
+        const [orderResult] = await pool.query(
+            `INSERT INTO Orders_Aerodeck (
+                order_number, user_id, order_type, total_items,
+                subtotal, discount, gst, platform_fee, delivery_fee,
+                total_amount, advance_amount, remaining_amount,
+                payment_method, payment_status, order_status,
+                address_id, is_hypo_used
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                orderNumber,
+                user_id,
+                "CARD",
+                1,
+                subtotal,
+                0,
+                gst,
+                platformFee,
+                deliveryFee,
+                totalAmount,
+                advance,
+                remaining,
+                payment_method,
+                finalPaymentStatus,
+                "PLACED",
+                address_id,
+                0
+            ]
+        );
+
+        const order_id = orderResult.insertId;
+
+        /* 2. Order item */
+        await pool.query(
+            `INSERT INTO Order_Items_Aerodeck (
+                order_id, product_id, product_type, category,
+                product_name, product_image, unit_price, quantity,
+                total_price, order_status, payment_status, cancel_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                order_id,
+                product_id,
+                "CARD",
+                product.product_category,
+                product.product_name,
+                product.product_image1,
+                price,
+                qty,
+                itemTotal,
+                "PLACED",
+                finalPaymentStatus,
+                new Date(Date.now() + 24 * 60 * 60 * 1000)
+            ]
+        );
+
+        /* 3. Payment row */
+        await pool.query(
+            `INSERT INTO Payment_Aerodeck
+             (order_id, user_id, payment_method, payment_status, amount)
+             VALUES (?, ?, ?, ?, ?)`,
+            [order_id, user_id, payment_method, finalPaymentStatus, advance > 0 ? advance : totalAmount]
+        );
+
+        return res.json({
+            success: true,
+            message: "Order placed successfully.",
+            order_id,
+            order_number: orderNumber
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

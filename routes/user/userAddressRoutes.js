@@ -6,12 +6,18 @@ const {
     updateAddress,
     deleteAddress,
     setPrimaryAddress,
-    getPincodeDetails
+    getPincodeDetails,
+    getPrimaryAddressByUserId 
 } = require("../../controllers/user/userAddressController");
 
 const router = express.Router();
 
 router.get("/address", getAddresses);
+
+router.get(
+    "/primary-address/:user_id",
+    getPrimaryAddressByUserId        
+);
 
 router.get("/address/pincode/:pincode", getPincodeDetails);
 

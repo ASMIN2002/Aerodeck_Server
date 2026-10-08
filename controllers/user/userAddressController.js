@@ -509,11 +509,53 @@ const getPincodeDetails = async (req, res) => {
 
 };
 
+const getPrimaryAddressByUserId = async (req, res) => {
+    try {
+        const { user_id } = req.params;
+
+        if (!user_id) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id required."
+            });
+        }
+
+        const [rows] = await db.query(
+            `SELECT *
+             FROM User_Address_Aerodeck
+             WHERE user_id = ? AND is_primary = 1
+             LIMIT 1`,
+            [user_id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Primary address not found."
+            });
+        }
+
+        return res.json({
+            success: true,
+            data: rows[0]
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
 module.exports = {
     getAddresses,
     addAddress,
     updateAddress,
     deleteAddress,
     setPrimaryAddress,
-    getPincodeDetails
+    getPincodeDetails,
+    getPrimaryAddressByUserId    
 };
+
