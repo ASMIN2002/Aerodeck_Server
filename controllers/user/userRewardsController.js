@@ -1,15 +1,11 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
-/* ============================================
-   GET USER REWARDS
-   ============================================ */
 exports.getUserRewards = async (req, res) => {
 
     try {
 
         const { session_token } = req.query;
-
         const user_id = await getUserIdFromSession(session_token);
 
         if (!user_id) {
@@ -19,17 +15,27 @@ exports.getUserRewards = async (req, res) => {
             });
         }
 
+        /* ============================================
+           AUTO EXPIRE — 24h baad req_userid = 0
+           (sirf un rows pe jahan MAI requester hun)
+           ============================================ */
+        await pool.query(
+            `UPDATE USER_REWARDS
+             SET req_userid = 0
+             WHERE req_userid = ?
+               AND redeemed = 0
+               AND TIMESTAMPDIFF(HOUR, updated_at, NOW()) >= 24`,
+            [user_id]
+        );
+
+        /* ============================================
+           MERI ROW
+           ============================================ */
         const [rows] = await pool.query(
             `SELECT
-                id,
-                user_id,
-                hypo_points,
-                redeemed,
-                promo_code,
-                count,
-                used_hypo,
-                req_userid,
-                updated_at
+                id, user_id, hypo_points, redeemed,
+                promo_code, count, used_hypo,
+                req_userid, updated_at
              FROM USER_REWARDS
              WHERE user_id = ?
              LIMIT 1`,
@@ -38,33 +44,45 @@ exports.getUserRewards = async (req, res) => {
 
         const myReward = rows[0] || null;
 
-        /* Owner ka naam (jiski row mein meri ID req_userid mein hai) */
-        let ownerName = "";
-
-        const [[ownerRow]] = await pool.query(
-            `SELECT user_id
+        /* ============================================
+           KYA MAINE KISI KA PROMO USE KIYA?
+           (meri id kisi aur ki row ke req_userid me?)
+           ============================================ */
+        const [[usedRow]] = await pool.query(
+            `SELECT user_id, updated_at
              FROM USER_REWARDS
              WHERE req_userid = ?
              LIMIT 1`,
             [user_id]
         );
 
-        if (ownerRow) {
-            const [[ownerUser]] = await pool.query(
-                `SELECT full_name FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
-                [ownerRow.user_id]
+        let usedOwnerEmail = "";
+        let usedOwnerId = 0;
+        let usedUpdatedAt = null;
+
+        if (usedRow) {
+
+            usedOwnerId = usedRow.user_id;
+            usedUpdatedAt = usedRow.updated_at;
+
+            const [[owner]] = await pool.query(
+                `SELECT email FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
+                [usedOwnerId]
             );
 
-            if (ownerUser) {
-                ownerName = ownerUser.full_name || "User";
+            if (owner && owner.email) {
+                usedOwnerEmail = owner.email;
             }
+
         }
 
         res.json({
             success: true,
             data: myReward ? {
                 ...myReward,
-                owner_name: ownerName
+                used_owner_id: usedOwnerId,
+                used_owner_email: usedOwnerEmail,
+                used_updated_at: usedUpdatedAt
             } : null
         });
 
@@ -298,9 +316,6 @@ exports.useHypoPoints = async (req, res) => {
 
 };
 
-/* ============================================
-   SEND REDEEM REQUEST
-   ============================================ */
 exports.sendRedeemRequest = async (req, res) => {
 
     try {
@@ -312,12 +327,12 @@ exports.sendRedeemRequest = async (req, res) => {
         if (!user_id) {
             return res.status(401).json({
                 success: false,
-                message: "SESSION EXPIRE"
+                message: "Session expired. Please login again."
             });
         }
 
         if (!promo_code) {
-            return res.status(400).json({
+            return res.status(200).json({
                 success: false,
                 message: "Enter a promo code."
             });
@@ -325,7 +340,6 @@ exports.sendRedeemRequest = async (req, res) => {
 
         const cleanCode = promo_code.trim().toUpperCase();
 
-        /* Find promo code owner */
         const [[targetUser]] = await pool.query(
             `SELECT user_id
              FROM USER_REWARDS
@@ -335,24 +349,23 @@ exports.sendRedeemRequest = async (req, res) => {
         );
 
         if (!targetUser) {
-            return res.status(404).json({
+            return res.status(200).json({
                 success: false,
-                message: "SESSION EXPIRE"
+                message: "Invalid or unavailable promo code."
             });
         }
 
-        /* Own code check */
         if (targetUser.user_id === user_id) {
-            return res.status(400).json({
+            return res.status(200).json({
                 success: false,
-                message: "You can not add your own promo code"
+                message: "You can not add your own promo code."
             });
         }
 
-        /* Save my user_id in target's row */
         await pool.query(
             `UPDATE USER_REWARDS
-             SET req_userid = ?
+             SET req_userid = ?,
+                 updated_at = NOW()
              WHERE user_id = ?`,
             [user_id, targetUser.user_id]
         );
