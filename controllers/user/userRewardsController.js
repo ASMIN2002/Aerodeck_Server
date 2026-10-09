@@ -17,25 +17,28 @@ exports.getUserRewards = async (req, res) => {
 
         /* ============================================
            AUTO EXPIRE — 24h baad req_userid = 0
-           (sirf un rows pe jahan MAI requester hun)
            ============================================ */
         await pool.query(
             `UPDATE USER_REWARDS
              SET req_userid = 0
-             WHERE req_userid = ?
+             WHERE user_id = ?
+               AND req_userid > 0
                AND redeemed = 0
                AND TIMESTAMPDIFF(HOUR, updated_at, NOW()) >= 24`,
             [user_id]
         );
 
-        /* ============================================
-           MERI ROW
-           ============================================ */
         const [rows] = await pool.query(
             `SELECT
-                id, user_id, hypo_points, redeemed,
-                promo_code, count, used_hypo,
-                req_userid, updated_at
+                id,
+                user_id,
+                hypo_points,
+                redeemed,
+                promo_code,
+                count,
+                used_hypo,
+                req_userid,
+                updated_at
              FROM USER_REWARDS
              WHERE user_id = ?
              LIMIT 1`,
@@ -45,11 +48,28 @@ exports.getUserRewards = async (req, res) => {
         const myReward = rows[0] || null;
 
         /* ============================================
-           KYA MAINE KISI KA PROMO USE KIYA?
-           (meri id kisi aur ki row ke req_userid me?)
+           REQUESTER EMAIL — jisne MERA promo use kiya
+           ============================================ */
+        let requesterEmail = "";
+
+        if (myReward && myReward.req_userid > 0) {
+
+            const [[requester]] = await pool.query(
+                `SELECT email FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
+                [myReward.req_userid]
+            );
+
+            if (requester && requester.email) {
+                requesterEmail = requester.email;
+            }
+
+        }
+
+        /* ============================================
+           MERI USED INFO — kya maine kisi ka promo use kiya?
            ============================================ */
         const [[usedRow]] = await pool.query(
-            `SELECT user_id, updated_at
+            `SELECT user_id, updated_at, redeemed
              FROM USER_REWARDS
              WHERE req_userid = ?
              LIMIT 1`,
@@ -59,11 +79,13 @@ exports.getUserRewards = async (req, res) => {
         let usedOwnerEmail = "";
         let usedOwnerId = 0;
         let usedUpdatedAt = null;
+        let usedRedeemed = 0;
 
         if (usedRow) {
 
             usedOwnerId = usedRow.user_id;
             usedUpdatedAt = usedRow.updated_at;
+            usedRedeemed = usedRow.redeemed;
 
             const [[owner]] = await pool.query(
                 `SELECT email FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
@@ -80,9 +102,11 @@ exports.getUserRewards = async (req, res) => {
             success: true,
             data: myReward ? {
                 ...myReward,
+                requester_email: requesterEmail,
                 used_owner_id: usedOwnerId,
                 used_owner_email: usedOwnerEmail,
-                used_updated_at: usedUpdatedAt
+                used_updated_at: usedUpdatedAt,
+                used_redeemed: usedRedeemed
             } : null
         });
 

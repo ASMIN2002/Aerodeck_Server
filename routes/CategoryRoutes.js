@@ -5,7 +5,9 @@ const router = express.Router();
 
 const {
     getCategories,
-    addCategory
+    addCategory,
+    updateCategory,
+    deleteCategory
 } = require("../controllers/CategoryController");
 
 
@@ -23,6 +25,20 @@ router.post(
     "/",
     upload.single("image"),
     addCategory
+);
+
+
+// UPDATE CATEGORY — catname + category
+router.put(
+    "/:catid",
+    updateCategory
+);
+
+
+// DELETE CATEGORY — row + cloudinary image
+router.delete(
+    "/:catid",
+    deleteCategory
 );
 
 

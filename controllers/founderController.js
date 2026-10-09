@@ -423,3 +423,81 @@ exports.allowAdmin = async (req, res) => {
         });
     }
 };
+/* ============================================
+   GET ALL TABLES — database ki saari tables
+   ============================================ */
+exports.getAllTables = async (req, res) => {
+    try {
+
+        const [rows] = await pool.query(`SHOW TABLES`);
+
+        /* Rows ka format: [{ Tables_in_dbname: 'table_name' }, ...] */
+        const tables = rows.map((row) => Object.values(row)[0]);
+
+        return res.json({
+            success: true,
+            data: tables
+        });
+
+    } catch (err) {
+        console.error("GET ALL TABLES ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   GET TABLE DATA — ek table ka data + columns
+   ============================================ */
+exports.getTableData = async (req, res) => {
+    try {
+
+        const { tableName } = req.params;
+
+        if (!tableName) {
+            return res.status(400).json({
+                success: false,
+                message: "Table name required."
+            });
+        }
+
+        /* Security — table name validate karo (SQL injection rokne ke liye) */
+        const [tableCheck] = await pool.query(`SHOW TABLES LIKE ?`, [tableName]);
+
+        if (tableCheck.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Table not found."
+            });
+        }
+
+        /* Data fetch — LIMIT 1000 */
+        const [rows] = await pool.query(
+            `SELECT * FROM \`${tableName}\` LIMIT 1000`
+        );
+
+        /* Columns fetch */
+        const [columns] = await pool.query(
+            `SHOW COLUMNS FROM \`${tableName}\``
+        );
+
+        const columnNames = columns.map((col) => col.Field);
+
+        return res.json({
+            success: true,
+            tableName,
+            columns: columnNames,
+            rows,
+            totalRows: rows.length
+        });
+
+    } catch (err) {
+        console.error("GET TABLE DATA ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

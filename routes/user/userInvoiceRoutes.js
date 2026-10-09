@@ -3,9 +3,44 @@ const router = express.Router();
 
 const userInvoiceController = require("../../controllers/user/userInvoiceController");
 
+/* ============================================
+   CREATE INVOICE
+   ============================================ */
+router.post(
+    "/create",
+    userInvoiceController.createInvoice
+);
+
+/* ============================================
+   GET ALL INVOICES
+   ============================================ */
 router.get(
-    "/:order_id/:product_id",
-    userInvoiceController.getInvoice
+    "/all",
+    userInvoiceController.getAllInvoices
+);
+
+/* ============================================
+   MARK GENERATED
+   ============================================ */
+router.put(
+    "/mark-generated/:invoice_id",
+    userInvoiceController.markGenerated
+);
+
+/* ============================================
+   TOGGLE SAVED
+   ============================================ */
+router.put(
+    "/toggle-saved/:invoice_id",
+    userInvoiceController.toggleSaved
+);
+
+/* ============================================
+   GET SINGLE INVOICE
+   ============================================ */
+router.get(
+    "/single/:invoice_id",
+    userInvoiceController.getInvoiceById
 );
 
 module.exports = router;

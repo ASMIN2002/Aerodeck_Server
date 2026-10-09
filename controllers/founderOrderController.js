@@ -223,9 +223,6 @@ exports.updateOrderStatus = async (req, res) => {
             [order_status, order_item_id]
         );
 
-        /* ============================================
-           STATS + COMMISSION — SHOP item DELIVERED hone pe
-           ============================================ */
         if (order_status === "DELIVERED") {
 
             const [[itemFull]] = await pool.query(
@@ -609,9 +606,6 @@ exports.getAdminCommissions = async (req, res) => {
         });
     }
 };
-/* ============================================
-   GET ALL COMMISSIONS (Founder)
-   ============================================ */
 exports.getAllCommissions = async (req, res) => {
     try {
         const [rows] = await pool.query(
@@ -660,9 +654,6 @@ exports.getAllCommissions = async (req, res) => {
     }
 };
 
-/* ============================================
-   UPDATE COMMISSION STATUS (Founder)
-   ============================================ */
 exports.updateCommissionStatus = async (req, res) => {
     try {
         const { id, status } = req.body;

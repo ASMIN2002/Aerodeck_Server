@@ -7,7 +7,9 @@ const {
     createAdmin,
     getAllUsers,
     verifyUserField,
-    allowAdmin
+    allowAdmin,
+    getAllTables,
+    getTableData
 } = require("../controllers/founderController");
 
 router.post("/create", createFounder);
@@ -16,5 +18,7 @@ router.post("/create-admin", createAdmin);
 router.get("/users", getAllUsers);
 router.post("/users/verify-field", verifyUserField);
 router.post("/allow-admin", allowAdmin);
+router.get("/tables", getAllTables);
+router.get("/table/:tableName", getTableData);
 
 module.exports = router;
