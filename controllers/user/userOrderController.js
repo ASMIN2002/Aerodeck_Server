@@ -233,50 +233,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 
             );
 
-            const invoiceNumber =
-                `AJDD${new Date().getFullYear()}${String(order_id).padStart(6, "0")}-${item.product_id}`;
-
-            const gstPercentage = 18;
-            const gstAmount = (unitPrice * item.quantity * gstPercentage) / 100;
-            const totalAmount = (unitPrice * item.quantity) + gstAmount;
-
-            await pool.query(
-
-                `INSERT INTO Invoice_Aerodeck
-    (
-        invoice_number,
-        order_id,
-        order_number,
-        user_id,
-        product_id,
-        product_name,
-        quantity,
-        unit_price,
-        gst_percentage,
-        gst_amount,
-        total_amount,
-        gstin_number
-    )
-    VALUES
-    (?,?,?,?,?,?,?,?,?,?,?,?)`,
-
-                [
-                    invoiceNumber,
-                    order_id,
-                    orderNumber,
-                    user_id,
-                    item.product_id,
-                    productName,
-                    item.quantity,
-                    unitPrice,
-                    gstPercentage,
-                    gstAmount,
-                    totalAmount,
-                    "21ABCDE1234F1Z5"
-                ]
-
-            );
-
         }
 
         for (const item of items) {

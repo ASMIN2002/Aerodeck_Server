@@ -36,6 +36,14 @@ router.put(
 );
 
 /* ============================================
+   GET INVOICES BY ADMIN
+   ============================================ */
+router.get(
+    "/admin/:admin_id",
+    userInvoiceController.getInvoicesByAdmin
+);
+
+/* ============================================
    GET SINGLE INVOICE
    ============================================ */
 router.get(

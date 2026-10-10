@@ -356,9 +356,7 @@ exports.verifyUserField = async (req, res) => {
         });
     }
 };
-/* ============================================
-   ALLOW ADMIN — EDIT-- prefix add karo
-   ============================================ */
+
 exports.allowAdmin = async (req, res) => {
     try {
         const { username } = req.body;
