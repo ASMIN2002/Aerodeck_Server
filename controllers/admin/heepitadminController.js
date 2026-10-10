@@ -337,8 +337,9 @@ exports.getAdminStatsRealtime = async (req, res) => {
       });
     }
 
+    /* Admin info — username + section */
     const [[adminRow]] = await db.query(
-      `SELECT username FROM heepitadmin WHERE id = ? LIMIT 1`,
+      `SELECT username, section FROM heepitadmin WHERE id = ? LIMIT 1`,
       [admin_id]
     );
 
@@ -351,35 +352,64 @@ exports.getAdminStatsRealtime = async (req, res) => {
 
     const adminUsername = adminRow.username;
 
-    const [[shopAgg]] = await db.query(
-      `SELECT
-                COALESCE(SUM(shop_total_likes), 0) AS total_likes,
-                COALESCE(AVG(shop_rating), 0) AS avg_rating
-             FROM Shop_Aerodeck
-             WHERE posted_by = ?`,
-      [adminUsername]
-    );
+    /* Section check */
+    const cleanSection = (adminRow.section || "")
+      .replace(/^EDIT--/, "");
+    const baseType = cleanSection.split("~")[0] || "";
+    const isCards = baseType === "CARDS";
+
+    let totalLikes = 0;
+    let avgRating = 0;
+
+    if (isCards) {
+      /* Cards — Products_Aerodeck */
+      const [[cardAgg]] = await db.query(
+        `SELECT
+            COALESCE(SUM(product_total_likes), 0) AS total_likes,
+            COALESCE(AVG(product_rating), 0) AS avg_rating
+         FROM Products_Aerodeck
+         WHERE posted_by = ?`,
+        [adminUsername]
+      );
+
+      totalLikes = Number(cardAgg?.total_likes) || 0;
+      avgRating = Number(cardAgg?.avg_rating) || 0;
+
+    } else {
+      /* Shop — Shop_Aerodeck */
+      const [[shopAgg]] = await db.query(
+        `SELECT
+            COALESCE(SUM(shop_total_likes), 0) AS total_likes,
+            COALESCE(AVG(shop_rating), 0) AS avg_rating
+         FROM Shop_Aerodeck
+         WHERE posted_by = ?`,
+        [adminUsername]
+      );
+
+      totalLikes = Number(shopAgg?.total_likes) || 0;
+      avgRating = Number(shopAgg?.avg_rating) || 0;
+    }
 
     const [[statsRow]] = await db.query(
       `SELECT
-                sells,
-                pending,
-                delivered,
-                commission,
-                analysh,
-                created_at
-             FROM heepitadmin_stats
-             WHERE admin_id = ?
-             ORDER BY id DESC
-             LIMIT 1`,
+            sells,
+            pending,
+            delivered,
+            commission,
+            analysh,
+            created_at
+         FROM heepitadmin_stats
+         WHERE admin_id = ?
+         ORDER BY id DESC
+         LIMIT 1`,
       [admin_id]
     );
 
     return res.json({
       success: true,
       data: {
-        likes: Number(shopAgg.total_likes) || 0,
-        ratings: Number(Number(shopAgg.avg_rating).toFixed(2)) || 0,
+        likes: totalLikes,
+        ratings: Number(avgRating.toFixed(2)) || 0,
         sells: Number(statsRow?.sells) || 0,
         pending: Number(statsRow?.pending) || 0,
         delivered: Number(statsRow?.delivered) || 0,

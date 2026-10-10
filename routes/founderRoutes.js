@@ -9,7 +9,10 @@ const {
     verifyUserField,
     allowAdmin,
     getAllTables,
-    getTableData
+    getTableData,
+    getAllFounders,
+    updateFounderPage,
+    deleteFounderPage
 } = require("../controllers/founderController");
 
 router.post("/create", createFounder);
@@ -20,5 +23,8 @@ router.post("/users/verify-field", verifyUserField);
 router.post("/allow-admin", allowAdmin);
 router.get("/tables", getAllTables);
 router.get("/table/:tableName", getTableData);
+router.get("/all-founders", getAllFounders);
+router.post("/update-page", updateFounderPage);
+router.post("/delete-page", deleteFounderPage);
 
 module.exports = router;

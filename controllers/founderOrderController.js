@@ -46,7 +46,7 @@ exports.getCancels = async (req, res) => {
                 oi.order_status,
                 oi.category,
 
-                s.posted_by
+                COALESCE(s.posted_by, p.posted_by) AS posted_by
 
              FROM Cancel_Aerodeck c
 
@@ -55,6 +55,9 @@ exports.getCancels = async (req, res) => {
 
              LEFT JOIN Shop_Aerodeck s
                 ON c.product_id = s.shop_id
+
+             LEFT JOIN Products_Aerodeck p
+                ON c.product_id = p.product_id
 
              ORDER BY c.cancel_id DESC`
         );
@@ -232,11 +235,29 @@ exports.updateOrderStatus = async (req, res) => {
                 [order_item_id]
             );
 
-            if (itemFull && itemFull.product_type === "SHOP") {
+            /* ============================================
+               COMMISSION — SHOP + CARD dono
+               ============================================ */
+            if (
+                itemFull &&
+                (itemFull.product_type === "SHOP" ||
+                    itemFull.product_type === "CARD")
+            ) {
+
+                let productTable = "";
+                let idColumn = "";
+
+                if (itemFull.product_type === "SHOP") {
+                    productTable = "Shop_Aerodeck";
+                    idColumn = "shop_id";
+                } else {
+                    productTable = "Products_Aerodeck";
+                    idColumn = "product_id";
+                }
 
                 const [shopRows] = await pool.query(
-                    `SELECT posted_by FROM Shop_Aerodeck 
-                     WHERE shop_id = ? LIMIT 1`,
+                    `SELECT posted_by FROM ${productTable}
+                     WHERE ${idColumn} = ? LIMIT 1`,
                     [itemFull.product_id]
                 );
 
@@ -245,7 +266,7 @@ exports.updateOrderStatus = async (req, res) => {
                     const postedBy = shopRows[0].posted_by;
 
                     const [adminRows] = await pool.query(
-                        `SELECT id FROM heepitadmin 
+                        `SELECT id FROM heepitadmin
                          WHERE username = ? LIMIT 1`,
                         [postedBy]
                     );
@@ -258,7 +279,7 @@ exports.updateOrderStatus = async (req, res) => {
 
                         /* ---- Check — already inserted? ---- */
                         const [existingComm] = await pool.query(
-                            `SELECT id FROM admin_comm 
+                            `SELECT id FROM admin_comm
                              WHERE item_id = ? LIMIT 1`,
                             [order_item_id]
                         );
@@ -408,11 +429,11 @@ exports.updateOrderStatus = async (req, res) => {
                 const [pendingRewardItems] = await pool.query(
                     `SELECT COUNT(*) AS pending_count
                      FROM Order_Items_Aerodeck oi
-                     LEFT JOIN Return_Aerodeck r 
+                     LEFT JOIN Return_Aerodeck r
                         ON oi.order_item_id = r.order_item_id
                      WHERE oi.order_id = ?
                      AND (
-                         (r.return_status IS NOT NULL 
+                         (r.return_status IS NOT NULL
                           AND r.return_status NOT IN ('NONE', ''))
                          OR
                          (
@@ -504,7 +525,6 @@ exports.updateOrderStatus = async (req, res) => {
         });
     }
 };
-
 exports.getOrdersWithUser = async (req, res) => {
     try {
         const [rows] = await pool.query(`

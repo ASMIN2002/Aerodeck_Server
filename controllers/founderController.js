@@ -499,3 +499,163 @@ exports.getTableData = async (req, res) => {
         });
     }
 };
+/* ============================================
+   GET ALL FOUNDERS
+   ============================================ */
+exports.getAllFounders = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT
+                id,
+                full_name,
+                username,
+                email,
+                profile_image,
+                updatepage
+             FROM founders
+             ORDER BY id DESC`
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.error("GET ALL FOUNDERS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   UPDATE FOUNDER PAGE
+   ============================================ */
+exports.updateFounderPage = async (req, res) => {
+    try {
+        const { founder_id, page } = req.body;
+
+        if (!founder_id || !page) {
+            return res.status(400).json({
+                success: false,
+                message: "founder_id and page required."
+            });
+        }
+
+        if (!["ADMIN", "USER"].includes(page.toUpperCase())) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid page."
+            });
+        }
+
+        const upperPage = page.toUpperCase();
+
+        const [[founder]] = await pool.query(
+            `SELECT updatepage FROM founders WHERE id = ? LIMIT 1`,
+            [founder_id]
+        );
+
+        if (!founder) {
+            return res.status(404).json({
+                success: false,
+                message: "Founder not found."
+            });
+        }
+
+        let current = founder.updatepage || "";
+        let arr = current
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean);
+
+        /* Already exists check */
+        if (arr.includes(upperPage)) {
+            return res.status(400).json({
+                success: false,
+                message: "Already added."
+            });
+        }
+
+        arr.push(upperPage);
+
+        const newVal = arr.join(",");
+
+        await pool.query(
+            `UPDATE founders SET updatepage = ? WHERE id = ?`,
+            [newVal, founder_id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Updated successfully.",
+            updatepage: newVal
+        });
+
+    } catch (err) {
+        console.error("UPDATE FOUNDER PAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   DELETE FOUNDER PAGE VALUE
+   ============================================ */
+exports.deleteFounderPage = async (req, res) => {
+    try {
+        const { founder_id, page } = req.body;
+
+        if (!founder_id || !page) {
+            return res.status(400).json({
+                success: false,
+                message: "founder_id and page required."
+            });
+        }
+
+        const upperPage = page.toUpperCase();
+
+        const [[founder]] = await pool.query(
+            `SELECT updatepage FROM founders WHERE id = ? LIMIT 1`,
+            [founder_id]
+        );
+
+        if (!founder) {
+            return res.status(404).json({
+                success: false,
+                message: "Founder not found."
+            });
+        }
+
+        let current = founder.updatepage || "";
+        let arr = current
+            .split(",")
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .filter((p) => p !== upperPage);
+
+        const newVal = arr.length > 0 ? arr.join(",") : null;
+
+        await pool.query(
+            `UPDATE founders SET updatepage = ? WHERE id = ?`,
+            [newVal, founder_id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Deleted successfully.",
+            updatepage: newVal
+        });
+
+    } catch (err) {
+        console.error("DELETE FOUNDER PAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
