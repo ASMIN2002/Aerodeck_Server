@@ -510,6 +510,7 @@ exports.getOrdersWithUser = async (req, res) => {
         const [rows] = await pool.query(`
             SELECT 
                 oi.*,
+                o.order_id AS order_id,
                 o.user_id,
                 o.address_id,
                 u.full_name AS customer_name,
@@ -536,7 +537,6 @@ exports.getOrdersWithUser = async (req, res) => {
                 ON o.user_id = u.user_id
             LEFT JOIN User_Address_Aerodeck a 
                 ON o.address_id = a.address_id
-            WHERE oi.product_type = 'SHOP'
             ORDER BY oi.order_item_id DESC
         `);
 
