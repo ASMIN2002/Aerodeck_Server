@@ -12,7 +12,11 @@ const {
     getTableData,
     getAllFounders,
     updateFounderPage,
-    deleteFounderPage
+    deleteFounderPage,
+    getAllNotificationsForManage,
+    insertNotificationManage,
+    updateNotificationManage,
+    deleteNotificationManage
 } = require("../controllers/founderController");
 
 router.post("/create", createFounder);
@@ -26,5 +30,9 @@ router.get("/table/:tableName", getTableData);
 router.get("/all-founders", getAllFounders);
 router.post("/update-page", updateFounderPage);
 router.post("/delete-page", deleteFounderPage);
+router.get("/notifications", getAllNotificationsForManage);
+router.post("/notifications", insertNotificationManage);
+router.put("/notifications", updateNotificationManage);
+router.delete("/notifications/:id", deleteNotificationManage);
 
 module.exports = router;

@@ -617,3 +617,62 @@ exports.getUserDetails = async (req, res) => {
         });
     }
 };
+
+exports.getAdminNotifications = async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT id, notification, status, created_at
+             FROM heepit_notification
+             WHERE status = 0
+             ORDER BY created_at DESC`
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.error("ADMIN NOTIF FETCH ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   GET PROCESSING UPDATE FOR ITEM
+   ============================================ */
+exports.getProcessingUpdate = async (req, res) => {
+    try {
+        const { item_id } = req.params;
+
+        if (!item_id) {
+            return res.status(400).json({
+                success: false,
+                message: "item_id required."
+            });
+        }
+
+        const [[row]] = await db.query(
+            `SELECT id, item_id, processing_update
+             FROM processing_updates
+             WHERE item_id = ?
+             LIMIT 1`,
+            [item_id]
+        );
+
+        return res.json({
+            success: true,
+            data: row || null
+        });
+
+    } catch (err) {
+        console.error("GET PROCESSING ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

@@ -63,4 +63,14 @@ router.get(
     userController.getUserDetails
 );
 
+router.get(
+    "/notification/admin",
+    userController.getAdminNotifications
+);
+
+router.get(
+    "/processing/:item_id",
+    userController.getProcessingUpdate
+);
+
 module.exports = router;

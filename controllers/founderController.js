@@ -659,3 +659,157 @@ exports.deleteFounderPage = async (req, res) => {
         });
     }
 };
+/* ============================================
+   GET ALL NOTIFICATIONS (founder)
+   ============================================ */
+exports.getAllNotificationsForManage = async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, notification, status, created_at
+             FROM heepit_notification
+             ORDER BY created_at DESC`
+        );
+
+        return res.json({
+            success: true,
+            data: rows
+        });
+
+    } catch (err) {
+        console.error("GET ALL NOTIF MANAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   INSERT NOTIFICATION (status: 1 = USER, 0 = ADMIN)
+   ============================================ */
+exports.insertNotificationManage = async (req, res) => {
+    try {
+        const { notification, status } = req.body;
+
+        if (!notification || notification.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "Notification text is required."
+            });
+        }
+
+        if (notification.trim().length > 200) {
+            return res.status(400).json({
+                success: false,
+                message: "Maximum 200 characters allowed."
+            });
+        }
+
+        const cleanText = notification.trim();
+        const statusVal = Number(status) === 1 ? 1 : 0;
+
+        const [result] = await pool.query(
+            `INSERT INTO heepit_notification (notification, status)
+             VALUES (?, ?)`,
+            [cleanText, statusVal]
+        );
+
+        return res.json({
+            success: true,
+            message: "Notification inserted successfully.",
+            id: result.insertId
+        });
+
+    } catch (err) {
+        console.error("INSERT NOTIF MANAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   UPDATE NOTIFICATION (text + status)
+   ============================================ */
+exports.updateNotificationManage = async (req, res) => {
+    try {
+        const { id, notification, status } = req.body;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Notification ID required."
+            });
+        }
+
+        if (!notification || notification.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "Notification text is required."
+            });
+        }
+
+        if (notification.trim().length > 200) {
+            return res.status(400).json({
+                success: false,
+                message: "Maximum 200 characters allowed."
+            });
+        }
+
+        const cleanText = notification.trim();
+        const statusVal = Number(status) === 1 ? 1 : 0;
+
+        await pool.query(
+            `UPDATE heepit_notification
+             SET notification = ?, status = ?
+             WHERE id = ?`,
+            [cleanText, statusVal, id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Notification updated successfully."
+        });
+
+    } catch (err) {
+        console.error("UPDATE NOTIF MANAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+/* ============================================
+   DELETE NOTIFICATION
+   ============================================ */
+exports.deleteNotificationManage = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Notification ID required."
+            });
+        }
+
+        await pool.query(
+            `DELETE FROM heepit_notification WHERE id = ?`,
+            [id]
+        );
+
+        return res.json({
+            success: true,
+            message: "Notification deleted successfully."
+        });
+
+    } catch (err) {
+        console.error("DELETE NOTIF MANAGE ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
