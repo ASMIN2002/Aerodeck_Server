@@ -77,4 +77,22 @@ router.post(
     userController.saveFcmToken
 );
 
+router.get("/test-fcm/:user_id", async (req, res) => {
+    try {
+        const { user_id } = req.params;
+        const { sendNotificationToUser } = require("../../utils/sendNotification");
+
+        const result = await sendNotificationToUser(
+            Number(user_id),
+            "Test Notification",
+            "Ye test hai - app band hone pe bhi aani chahiye"
+        );
+
+        res.json(result);
+    } catch (err) {
+        console.error("TEST FCM ERROR:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 module.exports = router;
