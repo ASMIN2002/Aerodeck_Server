@@ -1,5 +1,6 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
+const { sendNotificationToUser } = require("../../utils/sendNotification");
 
 function formatProcessingDate(d) {
     const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -176,6 +177,17 @@ exports.placeOrder = async (req, res) => {
                 `DELETE FROM User_Cart_Aerodeck WHERE user_id = ? AND product_id = ?`,
                 [user_id, item.product_id]
             );
+        }
+
+        try {
+            await sendNotificationToUser(
+                user_id,
+                "Order Placed ✅",
+                `Your order #${order_id} has been placed successfully.`,
+                { order_id: String(order_id) }
+            );
+        } catch (notifErr) {
+            console.error("Notification error:", notifErr);
         }
 
         res.json({ success: true, message: "Order Placed Successfully", order_id, order_number: orderNumber });
@@ -448,6 +460,17 @@ exports.cancelOrder = async (req, res) => {
             [order_item_id]
         );
 
+        try {
+            await sendNotificationToUser(
+                user_id,
+                "Cancel Request Submitted ❌",
+                `Your cancel request for item #${order_item_id} has been submitted.`,
+                { order_item_id: String(order_item_id) }
+            );
+        } catch (notifErr) {
+            console.error("Notification error:", notifErr);
+        }
+
         res.json({ success: true, message: "Cancel request submitted.", cancel_status: "REQUESTED" });
 
     } catch (err) {
@@ -556,6 +579,17 @@ exports.cancelWholeOrder = async (req, res) => {
             `UPDATE Orders_Aerodeck SET order_status = 'REQUESTED' WHERE order_id = ?`,
             [order_id]
         );
+
+        try {
+            await sendNotificationToUser(
+                user_id,
+                "Order Cancel Requested ❌",
+                `Your cancel request for order #${order_id} has been submitted.`,
+                { order_id: String(order_id) }
+            );
+        } catch (notifErr) {
+            console.error("Notification error:", notifErr);
+        }
 
         res.json({
             success: true,
@@ -682,6 +716,17 @@ exports.adminPlaceOrder = async (req, res) => {
              VALUES (?, ?, ?, ?, ?)`,
             [order_id, user_id, payment_method, finalPaymentStatus, advance > 0 ? advance : totalAmount]
         );
+
+        try {
+            await sendNotificationToUser(
+                user_id,
+                "Order Placed ✅",
+                `Your order #${order_id} has been placed successfully.`,
+                { order_id: String(order_id) }
+            );
+        } catch (notifErr) {
+            console.error("Notification error:", notifErr);
+        }
 
         return res.json({
             success: true,
