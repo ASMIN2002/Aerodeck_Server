@@ -1,3 +1,4 @@
+require("../config/firebase");
 const { getMessaging } = require("firebase-admin/messaging");
 const pool = require("../config/db");
 
@@ -18,16 +19,11 @@ async function sendNotificationToUser(user_id, title, body, data = {}) {
 
         const message = {
             token: user.fcm_token,
-            notification: {
-                title,
-                body
-            },
+            notification: { title, body },
             data: data,
             android: {
                 priority: "high",
-                notification: {
-                    sound: "default"
-                }
+                notification: { sound: "default" }
             }
         };
 
@@ -69,7 +65,6 @@ async function sendNotificationToAll(title, body, data = {}) {
         }
 
         const tokens = users.map((u) => u.fcm_token);
-
         const BATCH_SIZE = 500;
         let totalSuccess = 0;
         let totalFailure = 0;
@@ -79,21 +74,15 @@ async function sendNotificationToAll(title, body, data = {}) {
 
             const message = {
                 tokens: batch,
-                notification: {
-                    title,
-                    body
-                },
+                notification: { title, body },
                 data: data,
                 android: {
                     priority: "high",
-                    notification: {
-                        sound: "default"
-                    }
+                    notification: { sound: "default" }
                 }
             };
 
             const response = await getMessaging().sendEachForMulticast(message);
-
             totalSuccess += response.successCount;
             totalFailure += response.failureCount;
 
