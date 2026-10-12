@@ -706,11 +706,33 @@ exports.saveFcmToken = async (req, res) => {
             });
         }
 
+        const cleanToken = fcm_token.trim();
+
+        /* ============================================
+           STEP 1: Same token wale doosre users ka token NULL karo
+           ============================================ */
+        const [clearResult] = await db.query(
+            `UPDATE User_Aerodeck
+             SET fcm_token = NULL
+             WHERE fcm_token = ?
+               AND user_id != ?`,
+            [cleanToken, user_id]
+        );
+
+        if (clearResult.affectedRows > 0) {
+            console.log(
+                `Cleared same token from ${clearResult.affectedRows} other user(s)`
+            );
+        }
+
+        /* ============================================
+           STEP 2: Current user ko token assign karo
+           ============================================ */
         await db.query(
             `UPDATE User_Aerodeck
              SET fcm_token = ?
              WHERE user_id = ?`,
-            [fcm_token.trim(), user_id]
+            [cleanToken, user_id]
         );
 
         return res.json({
