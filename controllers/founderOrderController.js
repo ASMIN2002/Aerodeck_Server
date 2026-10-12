@@ -1,5 +1,8 @@
 const pool = require("../config/db");
 
+/* ============================================
+   HELPER — Format Date
+   ============================================ */
 function formatProcessingDate(d) {
     const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
     const day = String(d.getDate()).padStart(2, "0");
@@ -8,6 +11,9 @@ function formatProcessingDate(d) {
     return `${day}-${month}-${year}`;
 }
 
+/* ============================================
+   HELPER — Upsert Processing Status
+   ============================================ */
 async function upsertProcessingStatus(item_id, order_status) {
     const todayStr = formatProcessingDate(new Date());
     const newEntry = `${order_status}~${todayStr}`;
@@ -48,6 +54,133 @@ async function upsertProcessingStatus(item_id, order_status) {
     );
 }
 
+/* ============================================
+   HELPER — Get Product Image
+   ============================================ */
+async function getProductImage(product_id) {
+    try {
+        if (product_id.startsWith("S")) {
+            const [[row]] = await pool.query(
+                `SELECT shop_image1 AS image FROM Shop_Aerodeck WHERE shop_id = ? LIMIT 1`,
+                [product_id]
+            );
+            return row?.image || "";
+        }
+
+        if (product_id.startsWith("G")) {
+            const [[row]] = await pool.query(
+                `SELECT gift_image1 AS image FROM Gifts_Aerodeck WHERE gift_id = ? LIMIT 1`,
+                [product_id]
+            );
+            return row?.image || "";
+        }
+
+        /* Simple number — Cards */
+        const [[row]] = await pool.query(
+            `SELECT product_image1 AS image FROM Products_Aerodeck WHERE product_id = ? LIMIT 1`,
+            [product_id]
+        );
+        return row?.image || "";
+
+    } catch (err) {
+        console.error("GET PRODUCT IMAGE ERROR:", err);
+        return "";
+    }
+}
+
+/* ============================================
+   HELPER — Send Order Status Notification
+   ============================================ */
+async function sendOrderStatusNotification(order_item_id, order_status) {
+    try {
+        const { sendNotificationToUser } = require("../utils/sendNotification");
+
+        /* Order item + user fetch */
+        const [[item]] = await pool.query(
+            `SELECT
+                oi.order_item_id,
+                oi.product_id,
+                oi.product_name,
+                o.user_id,
+                o.order_id
+             FROM Order_Items_Aerodeck oi
+             INNER JOIN Orders_Aerodeck o ON oi.order_id = o.order_id
+             WHERE oi.order_item_id = ?
+             LIMIT 1`,
+            [order_item_id]
+        );
+
+        if (!item || !item.user_id) {
+            console.log("No item/user for notification");
+            return;
+        }
+
+        /* Product image */
+        const image = await getProductImage(item.product_id);
+
+        /* Title & Body per status */
+        const statusMap = {
+            PLACED: {
+                title: "Order Placed ✅",
+                body: `Your order "${item.product_name}" is placed.`
+            },
+            PACKED: {
+                title: "Order Packed 📦",
+                body: `Your order "${item.product_name}" has been packed.`
+            },
+            SHIPPED: {
+                title: "Order Shipped 🚚",
+                body: `Your order "${item.product_name}" has been shipped.`
+            },
+            OUT_FOR_DELIVERY: {
+                title: "Out for Delivery 🛵",
+                body: `Your order "${item.product_name}" is out for delivery.`
+            },
+            DELIVERED: {
+                title: "Order Delivered 🎉",
+                body: `Your order "${item.product_name}" has been delivered.`
+            },
+            REQUESTED: {
+                title: "Cancel Request ❌",
+                body: `Your cancel request for "${item.product_name}" has been submitted.`
+            },
+            PROCESSING: {
+                title: "Cancel Processing ⏳",
+                body: `Your cancel request for "${item.product_name}" is being processed.`
+            },
+            CANCELLED: {
+                title: "Order Cancelled ❌",
+                body: `Your order "${item.product_name}" has been cancelled.`
+            },
+            REFUND: {
+                title: "Refund Initiated 💰",
+                body: `Your refund for "${item.product_name}" has been initiated.`
+            }
+        };
+
+        const notif = statusMap[order_status];
+
+        if (!notif) {
+            console.log(`No notification template for status: ${order_status}`);
+            return;
+        }
+
+        await sendNotificationToUser(
+            item.user_id,
+            notif.title,
+            notif.body,
+            { order_id: String(item.order_id) },
+            image
+        );
+
+    } catch (err) {
+        console.error("SEND ORDER STATUS NOTIFICATION ERROR:", err);
+    }
+}
+
+/* ============================================
+   EXPORTS
+   ============================================ */
 exports.getOrders = async (req, res) => {
     try {
         const [rows] = await pool.query(`
@@ -56,11 +189,17 @@ exports.getOrders = async (req, res) => {
             ORDER BY order_item_id DESC
         `);
 
-        res.json({ success: true, data: rows });
+        res.json({
+            success: true,
+            data: rows
+        });
 
     } catch (err) {
         console.log(err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -68,24 +207,53 @@ exports.getCancels = async (req, res) => {
     try {
         const [rows] = await pool.query(
             `SELECT
-                c.cancel_id, c.order_item_id, c.product_id, c.user_id,
-                c.product_category, c.quantity, c.cancel_reason, c.order_date,
-                c.payment_status, c.cancel_status, c.cancel_request_date,
-                oi.product_name, oi.product_image, oi.unit_price, oi.total_price,
-                oi.order_id, oi.order_status, oi.category,
+                c.cancel_id,
+                c.order_item_id,
+                c.product_id,
+                c.user_id,
+                c.product_category,
+                c.quantity,
+                c.cancel_reason,
+                c.order_date,
+                c.payment_status,
+                c.cancel_status,
+                c.cancel_request_date,
+
+                oi.product_name,
+                oi.product_image,
+                oi.unit_price,
+                oi.total_price,
+                oi.order_id,
+                oi.order_status,
+                oi.category,
+
                 COALESCE(s.posted_by, p.posted_by) AS posted_by
+
              FROM Cancel_Aerodeck c
-             LEFT JOIN Order_Items_Aerodeck oi ON c.order_item_id = oi.order_item_id
-             LEFT JOIN Shop_Aerodeck s ON c.product_id = s.shop_id
-             LEFT JOIN Products_Aerodeck p ON c.product_id = p.product_id
+
+             LEFT JOIN Order_Items_Aerodeck oi
+                ON c.order_item_id = oi.order_item_id
+
+             LEFT JOIN Shop_Aerodeck s
+                ON c.product_id = s.shop_id
+
+             LEFT JOIN Products_Aerodeck p
+                ON c.product_id = p.product_id
+
              ORDER BY c.cancel_id DESC`
         );
 
-        res.json({ success: true, data: rows });
+        res.json({
+            success: true,
+            data: rows
+        });
 
     } catch (err) {
         console.log(err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -95,12 +263,16 @@ exports.updateCancelStatus = async (req, res) => {
 
         const [[cancelRow]] = await pool.query(
             `SELECT cancel_id, order_item_id, user_id
-             FROM Cancel_Aerodeck WHERE cancel_id = ?`,
+             FROM Cancel_Aerodeck
+             WHERE cancel_id = ?`,
             [cancel_id]
         );
 
         if (!cancelRow) {
-            return res.status(404).json({ success: false, message: "Cancel record not found." });
+            return res.status(404).json({
+                success: false,
+                message: "Cancel record not found."
+            });
         }
 
         await pool.query(
@@ -119,7 +291,11 @@ exports.updateCancelStatus = async (req, res) => {
         );
 
         if (!itemRow) {
-            return res.json({ success: true, message: "Cancel status updated." });
+            await sendOrderStatusNotification(cancelRow.order_item_id, cancel_status);
+            return res.json({
+                success: true,
+                message: "Cancel status updated."
+            });
         }
 
         const order_id = itemRow.order_id;
@@ -128,7 +304,8 @@ exports.updateCancelStatus = async (req, res) => {
             `SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN order_status = ? THEN 1 ELSE 0 END) AS matching
-             FROM Order_Items_Aerodeck WHERE order_id = ?`,
+             FROM Order_Items_Aerodeck
+             WHERE order_id = ?`,
             [cancel_status, order_id]
         );
 
@@ -172,6 +349,8 @@ exports.updateCancelStatus = async (req, res) => {
             }
         }
 
+        await sendOrderStatusNotification(cancelRow.order_item_id, cancel_status);
+
         res.json({
             success: true,
             message: "Cancel status updated.",
@@ -180,7 +359,10 @@ exports.updateCancelStatus = async (req, res) => {
 
     } catch (err) {
         console.log(err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -194,7 +376,10 @@ exports.updateOrderStatus = async (req, res) => {
         );
 
         if (!item) {
-            return res.status(404).json({ success: false, message: "Item not found." });
+            return res.status(404).json({
+                success: false,
+                message: "Item not found."
+            });
         }
 
         await pool.query(
@@ -404,11 +589,22 @@ exports.updateOrderStatus = async (req, res) => {
             }
         }
 
-        res.json({ success: true, message: "Order status updated." });
+        /* ============================================
+           SEND NOTIFICATION
+           ============================================ */
+        await sendOrderStatusNotification(order_item_id, order_status);
+
+        res.json({
+            success: true,
+            message: "Order status updated."
+        });
 
     } catch (err) {
         console.log(err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -444,11 +640,17 @@ exports.getOrdersWithUser = async (req, res) => {
             ORDER BY oi.order_item_id DESC
         `);
 
-        res.json({ success: true, data: rows });
+        res.json({
+            success: true,
+            data: rows
+        });
 
     } catch (err) {
         console.log(err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -457,7 +659,10 @@ exports.getAdminCommissions = async (req, res) => {
         const { admin_id } = req.params;
 
         if (!admin_id) {
-            return res.status(400).json({ success: false, message: "admin_id is required." });
+            return res.status(400).json({
+                success: false,
+                message: "admin_id is required."
+            });
         }
 
         const [rows] = await pool.query(
@@ -473,11 +678,17 @@ exports.getAdminCommissions = async (req, res) => {
             [admin_id]
         );
 
-        return res.json({ success: true, data: rows });
+        return res.json({
+            success: true,
+            data: rows
+        });
 
     } catch (err) {
         console.error("GET ADMIN COMMISSIONS ERROR:", err);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -497,11 +708,17 @@ exports.getAllCommissions = async (req, res) => {
              ORDER BY ac.id DESC`
         );
 
-        return res.json({ success: true, data: rows });
+        return res.json({
+            success: true,
+            data: rows
+        });
 
     } catch (err) {
         console.error("GET ALL COMMISSIONS ERROR:", err);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
 
@@ -510,7 +727,10 @@ exports.updateCommissionStatus = async (req, res) => {
         const { id, status } = req.body;
 
         if (!id) {
-            return res.status(400).json({ success: false, message: "id required." });
+            return res.status(400).json({
+                success: false,
+                message: "id required."
+            });
         }
 
         await pool.query(
@@ -518,10 +738,16 @@ exports.updateCommissionStatus = async (req, res) => {
             [status ? 1 : 0, id]
         );
 
-        return res.json({ success: true, message: "Status updated." });
+        return res.json({
+            success: true,
+            message: "Status updated."
+        });
 
     } catch (err) {
         console.error("UPDATE COMMISSION STATUS ERROR:", err);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
     }
 };
