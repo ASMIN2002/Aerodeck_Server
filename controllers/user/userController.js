@@ -676,3 +676,53 @@ exports.getProcessingUpdate = async (req, res) => {
         });
     }
 };
+/* ============================================
+   SAVE FCM TOKEN
+   ============================================ */
+exports.saveFcmToken = async (req, res) => {
+    try {
+        const { session_token, fcm_token } = req.body;
+
+        if (!session_token) {
+            return res.status(401).json({
+                success: false,
+                message: "Session token required."
+            });
+        }
+
+        if (!fcm_token || fcm_token.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "FCM token required."
+            });
+        }
+
+        const user_id = await getUserIdFromSession(session_token);
+
+        if (!user_id) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid or expired session."
+            });
+        }
+
+        await db.query(
+            `UPDATE User_Aerodeck
+             SET fcm_token = ?
+             WHERE user_id = ?`,
+            [fcm_token.trim(), user_id]
+        );
+
+        return res.json({
+            success: true,
+            message: "FCM token saved."
+        });
+
+    } catch (err) {
+        console.error("SAVE FCM TOKEN ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message
+        });
+    }
+};

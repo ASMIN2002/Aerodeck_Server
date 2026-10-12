@@ -72,5 +72,9 @@ router.get(
     "/processing/:item_id",
     userController.getProcessingUpdate
 );
+router.post(
+    "/save-fcm-token",
+    userController.saveFcmToken
+);
 
 module.exports = router;
