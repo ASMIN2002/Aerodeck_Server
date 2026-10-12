@@ -1,4 +1,4 @@
-const admin = require("../config/firebase");
+const { getMessaging } = require("firebase-admin/messaging");
 const pool = require("../config/db");
 
 /* ============================================
@@ -31,7 +31,7 @@ async function sendNotificationToUser(user_id, title, body, data = {}) {
             }
         };
 
-        const response = await admin.messaging().send(message);
+        const response = await getMessaging().send(message);
         console.log(`Notification sent to user ${user_id}:`, response);
         return { success: true, response };
 
@@ -92,7 +92,7 @@ async function sendNotificationToAll(title, body, data = {}) {
                 }
             };
 
-            const response = await admin.messaging().sendEachForMulticast(message);
+            const response = await getMessaging().sendEachForMulticast(message);
 
             totalSuccess += response.successCount;
             totalFailure += response.failureCount;
