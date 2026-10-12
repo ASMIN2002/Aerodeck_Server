@@ -1,3 +1,7 @@
+require("../config/firebase");
+const { getMessaging } = require("firebase-admin/messaging");
+const pool = require("../config/db");
+
 async function sendNotificationToUser(user_id, title, body, data = {}, image = "") {
     try {
         const [[user]] = await pool.query(
@@ -48,3 +52,77 @@ async function sendNotificationToUser(user_id, title, body, data = {}, image = "
         return { success: false, error: err.message };
     }
 }
+
+/* ============================================
+   SEND NOTIFICATION TO ALL USERS
+   ============================================ */
+async function sendNotificationToAll(title, body, data = {}) {
+    try {
+        const [users] = await pool.query(
+            `SELECT user_id, fcm_token FROM User_Aerodeck
+             WHERE fcm_token IS NOT NULL`
+        );
+
+        if (users.length === 0) {
+            console.log("No users with FCM tokens");
+            return { success: false, message: "No tokens" };
+        }
+
+        const tokens = users.map((u) => u.fcm_token);
+        const BATCH_SIZE = 500;
+        let totalSuccess = 0;
+        let totalFailure = 0;
+
+        for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+            const batch = tokens.slice(i, i + BATCH_SIZE);
+
+            const message = {
+                tokens: batch,
+                notification: { title, body },
+                data: data,
+                android: {
+                    priority: "high",
+                    notification: { sound: "default" }
+                }
+            };
+
+            const response = await getMessaging().sendEachForMulticast(message);
+            totalSuccess += response.successCount;
+            totalFailure += response.failureCount;
+
+            const invalidTokens = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    const code = resp.error?.code;
+                    if (
+                        code === "messaging/invalid-registration-token" ||
+                        code === "messaging/registration-token-not-registered"
+                    ) {
+                        invalidTokens.push(batch[idx]);
+                    }
+                }
+            });
+
+            if (invalidTokens.length > 0) {
+                await pool.query(
+                    `UPDATE User_Aerodeck
+                     SET fcm_token = NULL
+                     WHERE fcm_token IN (?)`,
+                    [invalidTokens]
+                );
+            }
+        }
+
+        console.log(`Broadcast: ${totalSuccess} success, ${totalFailure} failed`);
+        return { success: true, totalSuccess, totalFailure };
+
+    } catch (err) {
+        console.error("BROADCAST ERROR:", err);
+        return { success: false, error: err.message };
+    }
+}
+
+module.exports = {
+    sendNotificationToUser,
+    sendNotificationToAll
+};
