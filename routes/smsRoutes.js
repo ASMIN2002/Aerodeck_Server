@@ -36,12 +36,12 @@ router.post("/register-device", async (req, res) => {
             crypto.randomBytes(32).toString("hex");
 
         await pool.query(
-            `UPDATE SMS_Device_Aerodeck
+            `UPDATE sms_device_heepit
              SET is_primary = 0`
         );
 
         const [result] = await pool.query(
-            `INSERT INTO SMS_Device_Aerodeck
+            `INSERT INTO sms_device_heepit
              (
                  device_name,
                  device_phone,
@@ -101,7 +101,7 @@ router.post("/heartbeat", async (req, res) => {
                 device_id,
                 is_primary,
                 is_active
-             FROM SMS_Device_Aerodeck
+             FROM sms_device_heepit
              WHERE device_id = ?
                AND device_token = ?
              LIMIT 1`,
@@ -130,7 +130,7 @@ router.post("/heartbeat", async (req, res) => {
         }
 
         await pool.query(
-            `UPDATE SMS_Device_Aerodeck
+            `UPDATE sms_device_heepit
              SET last_seen_at = NOW()
              WHERE device_id = ?`,
             [device_id]

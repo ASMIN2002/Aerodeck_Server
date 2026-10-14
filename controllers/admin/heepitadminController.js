@@ -1,47 +1,53 @@
 const db = require("../../config/db");
 const crypto = require("crypto");
 
+const ALLOWED_SECTIONS = ["SHOP", "CARDS", "FOOD", "MEDICAL", "GIFTS"];
+
+function serverError(res, err, context = "Server error.") {
+  console.error(context, err.message);
+  return res.status(500).json({ success: false, message: context });
+}
+
+function badRequest(res, message) {
+  return res.status(400).json({ success: false, message });
+}
+
+function unauthorized(res, message = "Invalid username or password.") {
+  return res.status(401).json({ success: false, message });
+}
+
+function notFound(res, message = "Not found") {
+  return res.status(404).json({ success: false, message });
+}
+
+function parseSection(section) {
+  const clean = (section || "").replace(/^EDIT--/, "");
+  return clean.split("~")[0] || "";
+}
+
 exports.adminLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Username and password are required."
-      });
-    }
+    if (!username || !password)
+      return badRequest(res, "Username and password are required.");
 
     const [rows] = await db.query(
       `SELECT id, name, username, password, section
-             FROM heepitadmin
-             WHERE username = ?
-             LIMIT 1`,
+             FROM heepitadmin WHERE username = ? LIMIT 1`,
       [username.trim()]
     );
 
-    if (rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid username or password."
-      });
-    }
+    if (rows.length === 0) return unauthorized(res);
 
     const admin = rows[0];
 
-    if (admin.password !== password) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid username or password."
-      });
-    }
+    if (admin.password !== password) return unauthorized(res);
 
     const session_token = crypto.randomBytes(32).toString("hex");
 
     await db.query(
-      `UPDATE heepitadmin
-             SET session_token = ?, last_login = NOW()
-             WHERE id = ?`,
+      `UPDATE heepitadmin SET session_token = ?, last_login = NOW() WHERE id = ?`,
       [session_token, admin.id]
     );
 
@@ -53,16 +59,11 @@ exports.adminLogin = async (req, res) => {
         id: admin.id,
         name: admin.name,
         username: admin.username,
-        section: admin.section
-      }
+        section: admin.section,
+      },
     });
-
   } catch (err) {
-    console.error("ADMIN LOGIN ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "ADMIN LOGIN ERROR:");
   }
 };
 
@@ -70,38 +71,21 @@ exports.getProfileByToken = async (req, res) => {
   try {
     const { session_token } = req.body;
 
-    if (!session_token) {
-      return res.status(401).json({
-        success: false,
-        message: "Session token required."
-      });
-    }
+    if (!session_token)
+      return res.status(401).json({ success: false, message: "Session token required." });
 
     const [[admin]] = await db.query(
       `SELECT id, name, username, section
-             FROM heepitadmin
-             WHERE session_token = ? LIMIT 1`,
+             FROM heepitadmin WHERE session_token = ? LIMIT 1`,
       [session_token]
     );
 
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid session."
-      });
-    }
+    if (!admin)
+      return res.status(401).json({ success: false, message: "Invalid session." });
 
-    return res.json({
-      success: true,
-      admin
-    });
-
+    return res.json({ success: true, admin });
   } catch (err) {
-    console.error("GET PROFILE ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "GET PROFILE ERROR:");
   }
 };
 
@@ -109,49 +93,30 @@ exports.setSection = async (req, res) => {
   try {
     const { admin_id, section } = req.body;
 
-    if (!admin_id || !section) {
-      return res.status(400).json({
-        success: false,
-        message: "admin_id and section are required."
-      });
-    }
+    if (!admin_id || !section)
+      return badRequest(res, "admin_id and section are required.");
 
-    const baseType = section.replace(/^EDIT--/, "").split("~")[0];
-    const allowed = ["SHOP", "CARDS", "FOOD", "MEDICAL", "GIFTS"];
+    const baseType = parseSection(section);
 
-    if (!allowed.includes(baseType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid section."
-      });
-    }
+    if (!ALLOWED_SECTIONS.includes(baseType))
+      return badRequest(res, "Invalid section.");
 
     const [result] = await db.query(
-      `UPDATE heepitadmin
-             SET section = ?
+      `UPDATE heepitadmin SET section = ?
              WHERE id = ? AND section IS NULL`,
       [section, admin_id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Section already set or admin not found."
-      });
-    }
+    if (result.affectedRows === 0)
+      return badRequest(res, "Section already set or admin not found.");
 
     return res.json({
       success: true,
       message: "Section set successfully.",
-      section
+      section,
     });
-
   } catch (err) {
-    console.error("SET SECTION ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "SET SECTION ERROR:");
   }
 };
 
@@ -159,39 +124,23 @@ exports.updateName = async (req, res) => {
   try {
     const { admin_id, name } = req.body;
 
-    if (!admin_id || !name || name.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "admin_id and name are required."
-      });
-    }
+    if (!admin_id || !name || !name.trim())
+      return badRequest(res, "admin_id and name are required.");
 
     const [result] = await db.query(
-      `UPDATE heepitadmin
-             SET name = ?
-             WHERE id = ?`,
+      `UPDATE heepitadmin SET name = ? WHERE id = ?`,
       [name.trim(), admin_id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found."
-      });
-    }
+    if (result.affectedRows === 0) return notFound(res, "Admin not found.");
 
     return res.json({
       success: true,
       message: "Name updated successfully.",
-      name: name.trim()
+      name: name.trim(),
     });
-
   } catch (err) {
-    console.error("UPDATE NAME ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "UPDATE NAME ERROR:");
   }
 };
 
@@ -199,32 +148,19 @@ exports.getCategoriesByType = async (req, res) => {
   try {
     const { type } = req.query;
 
-    if (!type) {
-      return res.status(400).json({
-        success: false,
-        message: "type is required."
-      });
-    }
+    if (!type) return badRequest(res, "type is required.");
 
     const [rows] = await db.query(
       `SELECT catid, category AS catname
-             FROM ALL_Category
+             FROM all_category
              WHERE catname = ?
              ORDER BY category ASC`,
       [type]
     );
 
-    return res.json({
-      success: true,
-      data: rows
-    });
-
+    return res.json({ success: true, data: rows });
   } catch (err) {
-    console.error("GET CATEGORIES ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "GET CATEGORIES ERROR:");
   }
 };
 
@@ -232,39 +168,23 @@ exports.updateSection = async (req, res) => {
   try {
     const { admin_id, section } = req.body;
 
-    if (!admin_id || !section) {
-      return res.status(400).json({
-        success: false,
-        message: "admin_id and section are required."
-      });
-    }
+    if (!admin_id || !section)
+      return badRequest(res, "admin_id and section are required.");
 
     const [result] = await db.query(
-      `UPDATE heepitadmin
-             SET section = ?
-             WHERE id = ?`,
+      `UPDATE heepitadmin SET section = ? WHERE id = ?`,
       [section, admin_id]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found."
-      });
-    }
+    if (result.affectedRows === 0) return notFound(res, "Admin not found.");
 
     return res.json({
       success: true,
       message: "Section updated successfully.",
-      section
+      section,
     });
-
   } catch (err) {
-    console.error("UPDATE SECTION ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "UPDATE SECTION ERROR:");
   }
 };
 
@@ -272,27 +192,13 @@ exports.getAdminStats = async (req, res) => {
   try {
     const { admin_id } = req.params;
 
-    if (!admin_id) {
-      return res.status(400).json({
-        success: false,
-        message: "admin_id is required."
-      });
-    }
+    if (!admin_id) return badRequest(res, "admin_id is required.");
 
     const [rows] = await db.query(
-      `SELECT
-                likes,
-                ratings,
-                sells,
-                pending,
-                delivered,
-                commission,
-                analysh,
-                created_at
+      `SELECT likes, ratings, sells, pending, delivered, commission, analysh, created_at
              FROM heepitadmin_stats
              WHERE admin_id = ?
-             ORDER BY id DESC
-             LIMIT 1`,
+             ORDER BY id DESC LIMIT 1`,
       [admin_id]
     );
 
@@ -300,29 +206,15 @@ exports.getAdminStats = async (req, res) => {
       return res.json({
         success: true,
         data: {
-          likes: 0,
-          ratings: 0,
-          sells: 0,
-          pending: 0,
-          delivered: 0,
-          commission: 0,
-          analysh: null,
-          created_at: null
-        }
+          likes: 0, ratings: 0, sells: 0, pending: 0,
+          delivered: 0, commission: 0, analysh: null, created_at: null,
+        },
       });
     }
 
-    return res.json({
-      success: true,
-      data: rows[0]
-    });
-
+    return res.json({ success: true, data: rows[0] });
   } catch (err) {
-    console.error("GET ADMIN STATS ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "GET ADMIN STATS ERROR:");
   }
 };
 
@@ -330,80 +222,43 @@ exports.getAdminStatsRealtime = async (req, res) => {
   try {
     const { admin_id } = req.params;
 
-    if (!admin_id) {
-      return res.status(400).json({
-        success: false,
-        message: "admin_id is required."
-      });
-    }
+    if (!admin_id) return badRequest(res, "admin_id is required.");
 
-    /* Admin info — username + section */
     const [[adminRow]] = await db.query(
       `SELECT username, section FROM heepitadmin WHERE id = ? LIMIT 1`,
       [admin_id]
     );
 
-    if (!adminRow) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found."
-      });
-    }
+    if (!adminRow) return notFound(res, "Admin not found.");
 
     const adminUsername = adminRow.username;
-
-    /* Section check */
-    const cleanSection = (adminRow.section || "")
-      .replace(/^EDIT--/, "");
-    const baseType = cleanSection.split("~")[0] || "";
+    const baseType = parseSection(adminRow.section);
     const isCards = baseType === "CARDS";
 
-    let totalLikes = 0;
-    let avgRating = 0;
+    const productTable = isCards ? "cards_heepit" : "shop_heepit";
+    const likesCol = isCards ? "product_total_likes" : "shop_total_likes";
+    const ratingCol = isCards ? "product_rating" : "shop_rating";
 
-    if (isCards) {
-      /* Cards — Products_Aerodeck */
-      const [[cardAgg]] = await db.query(
+    const [[productAgg], [statsRow]] = await Promise.all([
+      db.query(
         `SELECT
-            COALESCE(SUM(product_total_likes), 0) AS total_likes,
-            COALESCE(AVG(product_rating), 0) AS avg_rating
-         FROM Products_Aerodeck
-         WHERE posted_by = ?`,
+                    COALESCE(SUM(${likesCol}), 0) AS total_likes,
+                    COALESCE(AVG(${ratingCol}), 0) AS avg_rating
+                 FROM ${productTable}
+                 WHERE posted_by = ?`,
         [adminUsername]
-      );
+      ).then(([rows]) => rows),
+      db.query(
+        `SELECT sells, pending, delivered, commission, analysh, created_at
+                 FROM heepitadmin_stats
+                 WHERE admin_id = ?
+                 ORDER BY id DESC LIMIT 1`,
+        [admin_id]
+      ).then(([rows]) => rows),
+    ]);
 
-      totalLikes = Number(cardAgg?.total_likes) || 0;
-      avgRating = Number(cardAgg?.avg_rating) || 0;
-
-    } else {
-      /* Shop — Shop_Aerodeck */
-      const [[shopAgg]] = await db.query(
-        `SELECT
-            COALESCE(SUM(shop_total_likes), 0) AS total_likes,
-            COALESCE(AVG(shop_rating), 0) AS avg_rating
-         FROM Shop_Aerodeck
-         WHERE posted_by = ?`,
-        [adminUsername]
-      );
-
-      totalLikes = Number(shopAgg?.total_likes) || 0;
-      avgRating = Number(shopAgg?.avg_rating) || 0;
-    }
-
-    const [[statsRow]] = await db.query(
-      `SELECT
-            sells,
-            pending,
-            delivered,
-            commission,
-            analysh,
-            created_at
-         FROM heepitadmin_stats
-         WHERE admin_id = ?
-         ORDER BY id DESC
-         LIMIT 1`,
-      [admin_id]
-    );
+    const totalLikes = Number(productAgg?.total_likes) || 0;
+    const avgRating = Number(productAgg?.avg_rating) || 0;
 
     return res.json({
       success: true,
@@ -415,15 +270,10 @@ exports.getAdminStatsRealtime = async (req, res) => {
         delivered: Number(statsRow?.delivered) || 0,
         commission: Number(statsRow?.commission) || 0,
         analysh: statsRow?.analysh || null,
-        created_at: statsRow?.created_at || null
-      }
+        created_at: statsRow?.created_at || null,
+      },
     });
-
   } catch (err) {
-    console.error("GET ADMIN STATS REALTIME ERROR:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Server error."
-    });
+    return serverError(res, err, "GET ADMIN STATS REALTIME ERROR:");
   }
 };

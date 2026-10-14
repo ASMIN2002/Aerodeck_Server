@@ -2,650 +2,289 @@ const db = require("../config/db");
 const cloudinary = require("../config/cloudinary");
 
 function getPublicId(url) {
-
     if (!url) return null;
-
     const parts = url.split("/upload/");
-
     if (parts.length < 2) return null;
-
     let publicId = parts[1];
-
     publicId = publicId.replace(/^v\d+\//, "");
-
     publicId = publicId.replace(/\.[^/.]+$/, "");
-
     return publicId;
+}
 
+function serverError(res, err, context = "Server Error") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
+
+function notFound(res, message = "Not found") {
+    return res.status(404).json({ success: false, message });
+}
+
+function calcFinalPrice(demoPrice, discountPercent) {
+    return (
+        Number(demoPrice) -
+        (Number(demoPrice) * Number(discountPercent)) / 100
+    ).toFixed(2);
+}
+
+async function deleteCloudinaryImages(images, resourceType = "image") {
+    for (const url of images) {
+        if (!url) continue;
+        try {
+            const publicId = getPublicId(url);
+            if (publicId) {
+                await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+            }
+        } catch (err) {
+            console.error("CLOUDINARY DELETE ERROR:", err.message);
+        }
+    }
+}
+
+async function upsertProductDetails(product_id, data) {
+    const [result] = await db.query(
+        `UPDATE product_details_heepit
+         SET category = ?, material = ?, size = ?, printing = ?,
+             delivery = ?, return_days = ?, vdo1 = ?, vdo1_url = ?,
+             vdo2 = ?, vdo2_url = ?, vdo3 = ?, vdo3_url = ?
+         WHERE product_id = ?`,
+        [
+            data.category || "", data.material || "", data.size || "",
+            data.printing || "", data.delivery || "",
+            data.return_days === "" ? null : data.return_days,
+            data.vdo1 || "", data.vdo1_url || "",
+            data.vdo2 || "", data.vdo2_url || "",
+            data.vdo3 || "", data.vdo3_url || "",
+            String(product_id),
+        ]
+    );
+
+    if (result.affectedRows === 0) {
+        await db.query(
+            `INSERT INTO product_details_heepit
+             (product_id, category, material, size, printing, delivery,
+              return_days, vdo1, vdo1_url, vdo2, vdo2_url, vdo3, vdo3_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                String(product_id), data.category || "", data.material || "",
+                data.size || "", data.printing || "", data.delivery || "",
+                data.return_days === "" ? null : data.return_days,
+                data.vdo1 || "", data.vdo1_url || "",
+                data.vdo2 || "", data.vdo2_url || "",
+                data.vdo3 || "", data.vdo3_url || "",
+            ]
+        );
+    }
+}
+
+async function resolveNames(usernames) {
+    const unique = [...new Set(usernames.filter(Boolean))];
+    if (unique.length === 0) return {};
+
+    const [founders] = await db.query(
+        `SELECT username, full_name FROM founders WHERE username IN (?)`,
+        [unique]
+    );
+
+    const [admins] = await db.query(
+        `SELECT username, name FROM heepitadmin WHERE username IN (?)`,
+        [unique]
+    );
+
+    const nameMap = {};
+
+    for (const f of founders) {
+        if (f.full_name) nameMap[f.username] = f.full_name;
+    }
+
+    for (const a of admins) {
+        if (!nameMap[a.username] && a.name) nameMap[a.username] = a.name;
+    }
+
+    for (const u of unique) {
+        if (!nameMap[u]) nameMap[u] = u;
+    }
+
+    return nameMap;
 }
 
 const addShop = async (req, res) => {
-
     try {
-
         const {
-
-            shop_name,
-            shop_category,
-            shop_description,
-            shop_demo_price,
-            shop_discount_percentage,
-            shop_highlight_text,
-            shop_price,
-            shop_image1,
-            shop_image2,
-            shop_image3,
-            shop_image4,
-            shop_status,
-            material,
-            size,
-            printing,
-            delivery,
-            return_days,
-            posted_by
+            shop_name, shop_category, shop_description,
+            shop_demo_price, shop_discount_percentage, shop_highlight_text,
+            shop_price, shop_image1, shop_image2, shop_image3, shop_image4,
+            shop_status, material, size, printing, delivery, return_days, posted_by,
         } = req.body;
 
-
         const [result] = await db.query(
-
-            `INSERT INTO Shop_Aerodeck (
-                shop_name,
-                shop_category,
-                shop_description,
-                shop_demo_price,
-                shop_discount_percentage,
-                shop_highlight_text,
-                shop_price,
-                shop_image1,
-                shop_image2,
-                shop_image3,
-                shop_image4,
-                shop_total_likes,
-                shop_rating,
-                shop_status,
-                posted_by,
-                updated_by,
-                updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-
+            `INSERT INTO shop_heepit (
+                shop_name, shop_category, shop_description,
+                shop_demo_price, shop_discount_percentage, shop_highlight_text,
+                shop_price, shop_image1, shop_image2, shop_image3, shop_image4,
+                shop_total_likes, shop_rating, shop_status,
+                posted_by, updated_by, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, NOW())`,
             [
-
-                shop_name,
-                shop_category,
-                shop_description,
-                shop_demo_price,
-                shop_discount_percentage,
-                shop_highlight_text,
+                shop_name, shop_category, shop_description,
+                shop_demo_price, shop_discount_percentage, shop_highlight_text,
                 shop_price,
-                shop_image1,
-                shop_image2,
-                shop_image3,
-                shop_image4,
-                0,
-                0,
-                shop_status,
-                posted_by || null,
-                posted_by || null
-
+                shop_image1 || "", shop_image2 || "",
+                shop_image3 || "", shop_image4 || "",
+                shop_status, posted_by || null, posted_by || null,
             ]
-
         );
-
 
         const shopId = `S${result.insertId}`;
 
-
         await db.query(
-
-            `UPDATE Shop_Aerodeck
-             SET shop_id = ?
-             WHERE id = ?`,
-
+            `UPDATE shop_heepit SET shop_id = ? WHERE id = ?`,
             [shopId, result.insertId]
-
         );
 
-
-        /* ✅ Videos empty string se save honge — updateShop se baad mein bharenge */
-
-        await db.query(
-
-            `INSERT INTO User_Product_Detail (
-                product_id,
-                category,
-                material,
-                size,
-                printing,
-                delivery,
-                return_days,
-                vdo1,
-                vdo1_url,
-                vdo2,
-                vdo2_url,
-                vdo3,
-                vdo3_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-
-            [
-                shopId,
-                shop_category,
-                material,
-                size,
-                printing,
-                delivery,
-                return_days,
-                "",
-                "",
-                "",
-                "",
-                "",
-                ""
-            ]
-
-        );
-
+        await upsertProductDetails(shopId, {
+            category: shop_category,
+            material, size, printing, delivery, return_days,
+        });
 
         return res.json({
-
             success: true,
             shop_id: shopId,
-            message: "Shop Added Successfully"
-
+            message: "Shop Added Successfully",
         });
-
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        return res.status(500).json({
-
-            success: false,
-            message: err.message
-
-        });
-
-    }
-
 };
-
-
 
 const getShops = async (req, res) => {
-
     try {
-
         const [rows] = await db.query(
-            "SELECT * FROM Shop_Aerodeck ORDER BY shop_id DESC"
+            `SELECT * FROM shop_heepit ORDER BY shop_id DESC`
         );
 
-        /* ============================================
-           RESOLVE USERNAME → NAME
-           (founders first, then heepitadmin)
-           ============================================ */
-
-        const resolveName = async (username) => {
-
-            if (!username) return null;
-
-            // 1. founders check
-            const [founderRows] = await db.query(
-                `SELECT full_name
-                 FROM founders
-                 WHERE username = ?
-                 LIMIT 1`,
-                [username]
-            );
-
-            if (founderRows.length > 0 && founderRows[0].full_name) {
-                return founderRows[0].full_name;
-            }
-
-            // 2. heepitadmin check
-            const [adminRows] = await db.query(
-                `SELECT name
-                 FROM heepitadmin
-                 WHERE username = ?
-                 LIMIT 1`,
-                [username]
-            );
-
-            if (adminRows.length > 0 && adminRows[0].name) {
-                return adminRows[0].name;
-            }
-
-            // 3. fallback — username as-is
-            return username;
-        };
-
-        /* ============================================
-           ATTACH RESOLVED NAMES
-           ============================================ */
-
-        const result = [];
-
-        for (const shop of rows) {
-
-            const postedByName = await resolveName(shop.posted_by);
-            const updatedByName = await resolveName(shop.updated_by);
-
-            result.push({
-                ...shop,
-                posted_by_name: postedByName,
-                updated_by_name: updatedByName
-            });
-
+        if (!rows.length) {
+            return res.json({ success: true, data: [] });
         }
 
-        res.json(result);
+        const usernames = [];
+        for (const shop of rows) {
+            if (shop.posted_by) usernames.push(shop.posted_by);
+            if (shop.updated_by) usernames.push(shop.updated_by);
+        }
 
+        const nameMap = await resolveNames(usernames);
+
+        const result = rows.map((shop) => ({
+            ...shop,
+            posted_by_name: shop.posted_by ? nameMap[shop.posted_by] : null,
+            updated_by_name: shop.updated_by ? nameMap[shop.updated_by] : null,
+        }));
+
+        return res.json({ success: true, data: result });
     } catch (err) {
-
-        res.status(500).json({
-            message: err.message
-        });
-
+        return serverError(res, err);
     }
-
 };
-
 
 const updateShop = async (req, res) => {
-
     try {
-
         const {
-
-            shop_id,
-            shop_name,
-            shop_category,
-            shop_description,
-            shop_demo_price,
-            shop_discount_percentage,
-            shop_highlight_text,
-
-            shop_image1,
-            shop_image2,
-            shop_image3,
-            shop_image4,
-
-            shop_image1_public_id,
-            shop_image2_public_id,
-            shop_image3_public_id,
-            shop_image4_public_id,
-            material,
-            size,
-            printing,
-            delivery,
-            return_days,
-            vdo1,
-            vdo1_public_id,
-            vdo2,
-            vdo2_public_id,
-            vdo3,
-            vdo3_public_id,
-            shop_status,
-            updated_by
-
+            shop_id, shop_name, shop_category, shop_description,
+            shop_demo_price, shop_discount_percentage, shop_highlight_text,
+            shop_image1, shop_image2, shop_image3, shop_image4,
+            shop_image1_public_id, shop_image2_public_id,
+            shop_image3_public_id, shop_image4_public_id,
+            material, size, printing, delivery, return_days,
+            vdo1, vdo1_public_id, vdo2, vdo2_public_id, vdo3, vdo3_public_id,
+            shop_status, updated_by,
         } = req.body;
 
-
-        const shop_price = (
-
-            Number(shop_demo_price)
-
-            -
-
-            (
-                Number(shop_demo_price)
-                *
-                Number(shop_discount_percentage)
-            ) / 100
-
-        ).toFixed(2);
-
+        const shop_price = calcFinalPrice(shop_demo_price, shop_discount_percentage);
 
         await db.query(
-
-            `UPDATE Shop_Aerodeck
-             SET
-                shop_name = ?,
-                shop_category = ?,
-                shop_description = ?,
-                shop_demo_price = ?,
-                shop_discount_percentage = ?,
-                shop_highlight_text = ?,
-                shop_price = ?,
-
-                shop_image1 = ?,
-                shop_image1_public_id = ?,
-
-                shop_image2 = ?,
-                shop_image2_public_id = ?,
-
-                shop_image3 = ?,
-                shop_image3_public_id = ?,
-
-                shop_image4 = ?,
-                shop_image4_public_id = ?,
-
-                shop_status = ?,
-                updated_by = ?,
-                updated_at = NOW()
-
+            `UPDATE shop_heepit SET
+                shop_name = ?, shop_category = ?, shop_description = ?,
+                shop_demo_price = ?, shop_discount_percentage = ?,
+                shop_highlight_text = ?, shop_price = ?,
+                shop_image1 = ?, shop_image1_public_id = ?,
+                shop_image2 = ?, shop_image2_public_id = ?,
+                shop_image3 = ?, shop_image3_public_id = ?,
+                shop_image4 = ?, shop_image4_public_id = ?,
+                shop_status = ?, updated_by = ?, updated_at = NOW()
              WHERE shop_id = ?`,
-
             [
-
-                shop_name,
-                shop_category,
-                shop_description,
-                shop_demo_price,
-                shop_discount_percentage,
-                shop_highlight_text,
-                shop_price,
-
-                shop_image1,
-                shop_image1_public_id,
-
-                shop_image2,
-                shop_image2_public_id,
-
-                shop_image3,
-                shop_image3_public_id,
-
-                shop_image4,
-                shop_image4_public_id,
-
-                shop_status,
-                updated_by || null,
-                shop_id
-
+                shop_name, shop_category, shop_description,
+                shop_demo_price, shop_discount_percentage,
+                shop_highlight_text, shop_price,
+                shop_image1 || "", shop_image1_public_id || "",
+                shop_image2 || "", shop_image2_public_id || "",
+                shop_image3 || "", shop_image3_public_id || "",
+                shop_image4 || "", shop_image4_public_id || "",
+                shop_status, updated_by || null, shop_id,
             ]
-
         );
 
-
-        /* ✅ YAHAN DHYAAN DO — variable `vdo1_public_id`, column `vdo1_url` */
-
-        const [detailResult] = await db.query(
-
-            `UPDATE User_Product_Detail
-             SET
-                category = ?,
-                material = ?,
-                size = ?,
-                printing = ?,
-                delivery = ?,
-                return_days = ?,
-                vdo1 = ?,
-                vdo1_url = ?,
-                vdo2 = ?,
-                vdo2_url = ?,
-                vdo3 = ?,
-                vdo3_url = ?
-             WHERE product_id = ?`,
-
-            [
-
-                shop_category || "",
-                material || "",
-                size || "",
-                printing || "",
-                delivery || "",
-                return_days === "" ? null : return_days,
-                vdo1 || "",
-                vdo1_public_id || "",
-                vdo2 || "",
-                vdo2_public_id || "",
-                vdo3 || "",
-                vdo3_public_id || "",
-                String(shop_id)
-
-            ]
-
-        );
-
-
-        if (detailResult.affectedRows === 0) {
-
-            await db.query(
-
-                `INSERT INTO User_Product_Detail
-                (
-                    product_id,
-                    category,
-                    material,
-                    size,
-                    printing,
-                    delivery,
-                    return_days,
-                    vdo1,
-                    vdo1_url,
-                    vdo2,
-                    vdo2_url,
-                    vdo3,
-                    vdo3_url
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-
-                [
-
-                    String(shop_id),
-                    shop_category || "",
-                    material || "",
-                    size || "",
-                    printing || "",
-                    delivery || "",
-                    return_days === "" ? null : return_days,
-                    vdo1 || "",
-                    vdo1_public_id || "",
-                    vdo2 || "",
-                    vdo2_public_id || "",
-                    vdo3 || "",
-                    vdo3_public_id || ""
-
-                ]
-
-            );
-
-        }
-
-
-        return res.json({
-
-            success: true,
-            message: "Shop Updated Successfully"
-
+        await upsertProductDetails(shop_id, {
+            category: shop_category,
+            material, size, printing, delivery, return_days,
+            vdo1, vdo1_url: vdo1_public_id,
+            vdo2, vdo2_url: vdo2_public_id,
+            vdo3, vdo3_url: vdo3_public_id,
         });
 
+        return res.json({ success: true, message: "Shop Updated Successfully" });
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        return res.status(500).json({
-
-            success: false,
-            message: err.message
-
-        });
-
-    }
-
 };
 
-/* ============================================
-   DELETE SHOP
-   ============================================ */
-
 const deleteShop = async (req, res) => {
-
     try {
-
         const { id } = req.params;
 
-
-        /* ✅ Shop images fetch */
         const [rows] = await db.query(
-
-            `SELECT
-                shop_image1,
-                shop_image2,
-                shop_image3,
-                shop_image4
-             FROM Shop_Aerodeck
-             WHERE shop_id = ?`,
-
+            `SELECT shop_image1, shop_image2, shop_image3, shop_image4
+             FROM shop_heepit WHERE shop_id = ?`,
             [id]
-
         );
 
-        if (rows.length === 0) {
-
-            return res.status(404).json({
-
-                success: false,
-                message: "Shop Not Found"
-
-            });
-
-        }
+        if (rows.length === 0) return notFound(res, "Shop Not Found");
 
         const shop = rows[0];
 
-
-        /* ✅ Videos fetch karo Cloudinary delete ke liye */
         const [videoRows] = await db.query(
-
-            `SELECT
-                vdo1_url,
-                vdo2_url,
-                vdo3_url
-             FROM User_Product_Detail
-             WHERE product_id = ?`,
-
+            `SELECT vdo1_url, vdo2_url, vdo3_url
+             FROM product_details_heepit WHERE product_id = ?`,
             [id]
-
         );
 
+        await deleteCloudinaryImages([
+            shop.shop_image1,
+            shop.shop_image2,
+            shop.shop_image3,
+            shop.shop_image4,
+        ]);
 
-        /* ✅ Images Cloudinary se delete */
-        if (shop.shop_image1) {
-            await cloudinary.uploader.destroy(
-                getPublicId(shop.shop_image1)
-            );
-        }
-
-        if (shop.shop_image2) {
-            await cloudinary.uploader.destroy(
-                getPublicId(shop.shop_image2)
-            );
-        }
-
-        if (shop.shop_image3) {
-            await cloudinary.uploader.destroy(
-                getPublicId(shop.shop_image3)
-            );
-        }
-
-        if (shop.shop_image4) {
-            await cloudinary.uploader.destroy(
-                getPublicId(shop.shop_image4)
-            );
-        }
-
-
-        /* ✅ Videos Cloudinary se delete */
         if (videoRows.length > 0) {
-
             const v = videoRows[0];
-
-            if (v.vdo1_url) {
-                try {
-                    await cloudinary.uploader.destroy(
-                        v.vdo1_url,
-                        { resource_type: "video" }
-                    );
-                    console.log("vdo1 deleted:", v.vdo1_url);
-                } catch (err) { console.log("vdo1 delete error:", err); }
-            }
-
-            if (v.vdo2_url) {
-                try {
-                    await cloudinary.uploader.destroy(
-                        v.vdo2_url,
-                        { resource_type: "video" }
-                    );
-                    console.log("vdo2 deleted:", v.vdo2_url);
-                } catch (err) { console.log("vdo2 delete error:", err); }
-            }
-
-            if (v.vdo3_url) {
-                try {
-                    await cloudinary.uploader.destroy(
-                        v.vdo3_url,
-                        { resource_type: "video" }
-                    );
-                    console.log("vdo3 deleted:", v.vdo3_url);
-                } catch (err) { console.log("vdo3 delete error:", err); }
-            }
-
+            await deleteCloudinaryImages([v.vdo1_url, v.vdo2_url, v.vdo3_url], "video");
         }
 
+        await db.query(`DELETE FROM likes_heepit WHERE product_id = ?`, [id]);
+        await db.query(`DELETE FROM ratings_heepit WHERE product_id = ?`, [id]);
+        await db.query(`DELETE FROM product_details_heepit WHERE product_id = ?`, [id]);
+        await db.query(`DELETE FROM shop_heepit WHERE shop_id = ?`, [id]);
 
-        /* ✅ DB se delete */
-        await db.query(
-            "DELETE FROM Product_Likes_AERODECK WHERE product_id = ?",
-            [id]
-        );
-
-        await db.query(
-            "DELETE FROM Product_Ratings_AERODECK WHERE product_id = ?",
-            [id]
-        );
-
-        await db.query(
-            "DELETE FROM User_Product_Detail WHERE product_id = ?",
-            [id]
-        );
-
-        await db.query(
-            "DELETE FROM Shop_Aerodeck WHERE shop_id = ?",
-            [id]
-        );
-
-
-        return res.json({
-
-            success: true,
-            message: "Shop Deleted"
-
-        });
-
+        return res.json({ success: true, message: "Shop Deleted" });
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        return res.status(500).json({
-
-            success: false,
-            message: err.message
-
-        });
-
-    }
-
 };
-
 
 module.exports = {
     getShops,
     addShop,
     updateShop,
-    deleteShop
+    deleteShop,
 };

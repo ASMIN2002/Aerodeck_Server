@@ -1,1177 +1,436 @@
 const cloudinary = require("../config/cloudinary");
 const getUserIdFromSession = require("../middleware/getUserIdFromSession");
-
 const db = require("../config/db");
 
 function getPublicId(url) {
-
   if (!url) return null;
-
   const parts = url.split("/upload/");
-
   if (parts.length < 2) return null;
-
   let publicId = parts[1];
-
   publicId = publicId.replace(/^v\d+\//, "");
-
   publicId = publicId.replace(/\.[^/.]+$/, "");
-
   return publicId;
-
 }
-exports.uploadProfile = async (req, res) => {
 
+function serverError(res, err, context = "Server Error") {
+  console.error(context, err.message);
+  return res.status(500).json({ success: false, message: context });
+}
+
+function badRequest(res, message) {
+  return res.status(400).json({ success: false, message });
+}
+
+function unauthorized(res) {
+  return res.status(401).json({ success: false, message: "Invalid session." });
+}
+
+function notFound(res, message = "Not found") {
+  return res.status(404).json({ success: false, message });
+}
+
+async function uploadToCloudinary(fileBuffer, options = {}) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      options,
+      (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+}
+
+async function deleteFromCloudinary(publicId, resourceType = "image") {
+  if (!publicId) return;
   try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+  } catch (err) {
+    console.error("CLOUDINARY DELETE ERROR:", err.message);
+  }
+}
+
+async function deleteOldImage(url) {
+  if (!url) return;
+  const publicId = getPublicId(url);
+  if (publicId) await deleteFromCloudinary(publicId);
+}
+
+async function authenticate(session_token) {
+  if (!session_token) return null;
+  return await getUserIdFromSession(session_token);
+}
+
+exports.uploadProfile = async (req, res) => {
+  try {
+    if (!req.file) return badRequest(res, "No Image Selected");
 
     const founderId = req.body.founderId;
 
-    if (!req.file) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "No Image Selected"
-
-      });
-
-    }
     if (founderId) {
-
       const [rows] = await db.query(
-
-        `SELECT profile_image
-     FROM founders
-     WHERE id = ?`,
-
+        `SELECT profile_image FROM founders WHERE id = ?`,
         [founderId]
-
       );
 
-      if (
-
-        rows.length > 0 &&
-
-        rows[0].profile_image
-
-      ) {
-
-        const publicId = getPublicId(
-
-          rows[0].profile_image
-
-        );
-
-        if (publicId) {
-
-          await cloudinary.uploader.destroy(
-
-            publicId
-
-          );
-
-          console.log(
-
-            "OLD PROFILE IMAGE DELETED:",
-
-            publicId
-
-          );
-
-        }
-
+      if (rows.length > 0 && rows[0].profile_image) {
+        await deleteOldImage(rows[0].profile_image);
       }
-
     }
 
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/FOUNDERS"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            console.error("Cloudinary Error:", err);
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/FOUNDERS",
     });
 
     return res.json({
-
       success: true,
-
       url: result.secure_url,
-
-      public_id: result.public_id
-
+      public_id: result.public_id,
     });
-
+  } catch (err) {
+    return serverError(res, err, "UPLOAD FAILED:");
   }
-
-  catch (err) {
-
-    console.error("UPLOAD FAILED");
-
-    console.error(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
-
 };
+
 exports.uploadProduct = async (req, res) => {
-
   try {
+    if (!req.file) return badRequest(res, "No Image Selected");
 
-    if (!req.file) {
+    const { product_id, image_no } = req.body;
 
-      return res.status(400).json({
-
-        success: false,
-
-        message: "No Image Selected"
-
-      });
-
-    }
-
-    const {
-
-      product_id,
-
-      image_no
-
-    } = req.body;
+    if (!product_id || !image_no)
+      return badRequest(res, "Product ID & Image No Required");
 
     const [rows] = await db.query(
-
-      `SELECT
-        product_image1,
-        product_image2,
-        product_image3,
-        product_image4
-     FROM Products_Aerodeck
-     WHERE product_id = ?`,
-
+      `SELECT product_image1, product_image2, product_image3, product_image4
+             FROM cards_heepit WHERE product_id = ?`,
       [product_id]
-
     );
 
     if (rows.length > 0) {
-
-      const oldUrl = rows[0][`product_image${image_no}`];
-
-      if (oldUrl) {
-
-        const publicId = getPublicId(oldUrl);
-
-        if (publicId) {
-
-          await cloudinary.uploader.destroy(publicId);
-
-          console.log("OLD IMAGE DELETED:", publicId);
-
-        }
-
-      }
-
+      await deleteOldImage(rows[0][`product_image${image_no}`]);
     }
 
-    if (!product_id || !image_no) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "Product ID & Image No Required"
-
-      });
-
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/PRODUCTS",
-
-          public_id:
-
-            `product_${product_id}_image${image_no}`,
-
-          overwrite: true,
-
-          invalidate: true,
-
-          resource_type: "image"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/PRODUCTS",
+      public_id: `product_${product_id}_image${image_no}`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
     });
 
-    return res.json({
-
-      success: true,
-
-      url: result.secure_url
-
-    });
-
+    return res.json({ success: true, url: result.secure_url });
+  } catch (err) {
+    return serverError(res, err);
   }
-
-  catch (err) {
-
-    console.log(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
-
 };
+
 exports.uploadGift = async (req, res) => {
-
   try {
+    if (!req.file) return badRequest(res, "No Image Selected");
 
-    if (!req.file) {
+    const { gift_id, image_no } = req.body;
 
-      return res.status(400).json({
+    if (!gift_id || !image_no)
+      return badRequest(res, "Gift ID & Image No Required");
 
-        success: false,
-
-        message: "No Image Selected"
-
-      });
-
-    }
-
-    const {
-      gift_id,
-      image_no
-    } = req.body;
     const [rows] = await db.query(
-
-      `SELECT
-    gift_image1,
-    gift_image2,
-    gift_image3,
-    gift_image4
- FROM Gifts_Aerodeck
- WHERE gift_id = ?`,
-
+      `SELECT gift_image1, gift_image2, gift_image3, gift_image4
+             FROM food_heepit WHERE gift_id = ?`,
       [gift_id]
-
     );
 
     if (rows.length > 0) {
-
-      const oldUrl = rows[0][`gift_image${image_no}`];
-
-      if (oldUrl) {
-
-        const publicId = getPublicId(oldUrl);
-
-        if (publicId) {
-
-          await cloudinary.uploader.destroy(publicId);
-
-          console.log("OLD IMAGE DELETED:", publicId);
-
-        }
-
-      }
-
+      await deleteOldImage(rows[0][`gift_image${image_no}`]);
     }
 
-    if (!gift_id || !image_no) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "Gift ID & Image No Required"
-
-      });
-
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/GIFTS",
-
-          public_id:
-
-            `gift_${gift_id}_image${image_no}`,
-
-          overwrite: true,
-
-          invalidate: true,
-
-          resource_type: "image"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/GIFTS",
+      public_id: `gift_${gift_id}_image${image_no}`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
     });
+
     return res.json({
       success: true,
       url: result.secure_url,
-      public_id: result.public_id
+      public_id: result.public_id,
     });
-
+  } catch (err) {
+    return serverError(res, err);
   }
-
-  catch (err) {
-
-    console.log(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
-
 };
+
 exports.uploadPremium = async (req, res) => {
-
   try {
+    if (!req.file) return badRequest(res, "No Image Selected");
 
-    if (!req.file) {
+    const { premium_id, image_no } = req.body;
 
-      return res.status(400).json({
-
-        success: false,
-
-        message: "No Image Selected"
-
-      });
-
-    }
-
-    const {
-      premium_id,
-      image_no
-    } = req.body;
+    if (!premium_id || !image_no)
+      return badRequest(res, "Premium ID & Image No Required");
 
     const [rows] = await db.query(
-
-      `SELECT
-        premium_image1,
-        premium_image2,
-        premium_image3,
-        premium_image4
-      FROM Premium_Aerodeck
-      WHERE premium_id = ?`,
-
+      `SELECT premium_image1, premium_image2, premium_image3, premium_image4
+             FROM medical_heepit WHERE premium_id = ?`,
       [premium_id]
-
     );
 
     if (rows.length > 0) {
-
-      const oldUrl = rows[0][`premium_image${image_no}`];
-
-      if (oldUrl) {
-
-        const publicId = getPublicId(oldUrl);
-
-        if (publicId) {
-
-          await cloudinary.uploader.destroy(publicId);
-
-          console.log("OLD IMAGE DELETED:", publicId);
-
-        }
-
-      }
-
+      await deleteOldImage(rows[0][`premium_image${image_no}`]);
     }
 
-    if (!premium_id || !image_no) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "Premium ID & Image No Required"
-
-      });
-
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/PREMIUM",
-
-          public_id: `premium_${premium_id}_image${image_no}`,
-
-          overwrite: true,
-
-          invalidate: true,
-
-          resource_type: "image"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/PREMIUM",
+      public_id: `premium_${premium_id}_image${image_no}`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
     });
-    return res.json({
 
+    return res.json({
       success: true,
       url: result.secure_url,
-      public_id: result.public_id
-
+      public_id: result.public_id,
     });
-
+  } catch (err) {
+    return serverError(res, err);
   }
-
-  catch (err) {
-
-    console.log(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
-
 };
+
 exports.uploadShop = async (req, res) => {
-
   try {
+    if (!req.file) return badRequest(res, "No Image Selected");
 
-    if (!req.file) {
+    const { shop_id, image_no } = req.body;
 
-      return res.status(400).json({
-
-        success: false,
-
-        message: "No Image Selected"
-
-      });
-
-    }
-
-    const {
-      shop_id,
-      image_no
-    } = req.body;
+    if (!shop_id || !image_no)
+      return badRequest(res, "Shop ID & Image No Required");
 
     const [rows] = await db.query(
-
-      `SELECT
-        shop_image1,
-        shop_image2,
-        shop_image3,
-        shop_image4
-      FROM Shop_Aerodeck
-      WHERE shop_id = ?`,
-
+      `SELECT shop_image1, shop_image2, shop_image3, shop_image4
+             FROM shop_heepit WHERE shop_id = ?`,
       [shop_id]
-
     );
 
     if (rows.length > 0) {
-
-      const oldUrl = rows[0][`shop_image${image_no}`];
-
-      if (oldUrl) {
-
-        const publicId = getPublicId(oldUrl);
-
-        if (publicId) {
-
-          await cloudinary.uploader.destroy(publicId);
-
-          console.log("OLD IMAGE DELETED:", publicId);
-
-        }
-
-      }
-
+      await deleteOldImage(rows[0][`shop_image${image_no}`]);
     }
 
-    if (!shop_id || !image_no) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "Shop ID & Image No Required"
-
-      });
-
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/SHOP",
-
-          public_id: `shop_${shop_id}_image${image_no}`,
-
-          overwrite: true,
-
-          invalidate: true,
-
-          resource_type: "image"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/SHOP",
+      public_id: `shop_${shop_id}_image${image_no}`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
     });
 
     return res.json({
-
       success: true,
       url: result.secure_url,
-      public_id: result.public_id
-
+      public_id: result.public_id,
     });
-
+  } catch (err) {
+    return serverError(res, err);
   }
-
-  catch (err) {
-
-    console.log(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
-  }
-
 };
+
 exports.uploadReviewImage = async (req, res) => {
-
   try {
+    const { session_token, order_item_id, product_id } = req.body;
 
-    const {
-
-      session_token,
-      order_item_id,
-      product_id
-
-    } = req.body;
-    const user_id = await getUserIdFromSession(session_token);
-
-    if (!user_id) {
-
-      return res.status(401).json({
-
-        success: false,
-        message: "Invalid session."
-
-      });
-
-    }
+    const user_id = await authenticate(session_token);
+    if (!user_id) return unauthorized(res);
 
     const [[check]] = await db.query(
-
-      `SELECT COUNT(*) AS total
-   FROM Review_Media_AERODECK
-   WHERE order_item_id = ?`,
-
+      `SELECT COUNT(*) AS total FROM review_media_heepit WHERE order_item_id = ?`,
       [order_item_id]
-
     );
 
-    if (check.total >= 2) {
+    if (check.total >= 2)
+      return res.json({ success: false, message: "Maximum 2 images allowed." });
 
-      return res.json({
+    if (!req.file) return badRequest(res, "No image selected.");
 
-        success: false,
-        message: "Maximum 2 images allowed."
-
-      });
-
-    }
-
-    if (!req.file) {
-
-      return res.status(400).json({
-
-        success: false,
-        message: "No image selected."
-
-      });
-
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-
-        {
-
-          folder: "AERODECK/REVIEWS",
-
-          resource_type: "image"
-
-        },
-
-        (err, result) => {
-
-          if (err) {
-
-            return reject(err);
-
-          }
-
-          resolve(result);
-
-        }
-
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/REVIEWS",
+      resource_type: "image",
     });
 
     const [insertResult] = await db.query(
-
-      `INSERT INTO Review_Media_AERODECK
-(
-    order_item_id,
-    user_id,
-    product_id,
-    image_url,
-    public_id
-)
-VALUES
-(?,?,?,?,?)`,
-
-      [
-        order_item_id,
-        user_id,
-        product_id,
-        result.secure_url,
-        result.public_id
-      ]
-
+      `INSERT INTO review_media_heepit
+             (order_item_id, user_id, product_id, image_url, public_id)
+             VALUES (?, ?, ?, ?, ?)`,
+      [order_item_id, user_id, product_id, result.secure_url, result.public_id]
     );
 
     return res.json({
-
       success: true,
-
       media_id: insertResult.insertId,
-
       image_url: result.secure_url,
-
-      public_id: result.public_id
-
+      public_id: result.public_id,
     });
-
   } catch (err) {
-
-    console.error(err);
-
-    return res.status(500).json({
-
-      success: false,
-
-      message: err.message
-
-    });
-
+    return serverError(res, err);
   }
-
 };
+
 exports.deleteReviewImage = async (req, res) => {
-
   try {
-
     const { media_id } = req.params;
-
     const { session_token } = req.body;
 
-    const user_id = await getUserIdFromSession(session_token);
-
-    if (!user_id) {
-
-      return res.status(401).json({
-
-        success: false,
-        message: "Invalid session."
-
-      });
-
-    }
+    const user_id = await authenticate(session_token);
+    if (!user_id) return unauthorized(res);
 
     const [rows] = await db.query(
-
-      `SELECT
-
-                public_id
-
-            FROM Review_Media_AERODECK
-
-            WHERE
-
-                media_id = ?
-                AND user_id = ?`,
-
-      [
-
-        media_id,
-        user_id
-
-      ]
-
+      `SELECT public_id FROM review_media_heepit
+             WHERE media_id = ? AND user_id = ?`,
+      [media_id, user_id]
     );
 
-    if (rows.length === 0) {
+    if (rows.length === 0) return notFound(res, "Image not found.");
 
-      return res.status(404).json({
-
-        success: false,
-        message: "Image not found."
-
-      });
-
-    }
-
-    await cloudinary.uploader.destroy(
-
-      rows[0].public_id
-
-    );
+    await deleteFromCloudinary(rows[0].public_id);
 
     await db.query(
-
-      `DELETE FROM Review_Media_AERODECK
-
-             WHERE
-
-                media_id = ?
-                AND user_id = ?`,
-
-      [
-
-        media_id,
-        user_id
-
-      ]
-
+      `DELETE FROM review_media_heepit WHERE media_id = ? AND user_id = ?`,
+      [media_id, user_id]
     );
 
-    return res.json({
-
-      success: true,
-      message: "Image deleted successfully."
-
-    });
-
+    return res.json({ success: true, message: "Image deleted successfully." });
   } catch (err) {
-
-    console.error(err);
-
-    return res.status(500).json({
-
-      success: false,
-      message: err.message
-
-    });
-
+    return serverError(res, err);
   }
-
 };
+
 exports.uploadUserProfile = async (req, res) => {
   try {
     const { session_token } = req.body;
 
-    const user_id = await getUserIdFromSession(session_token);
+    const user_id = await authenticate(session_token);
+    if (!user_id) return unauthorized(res);
 
-    if (!user_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid session."
-      });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No image selected."
-      });
-    }
+    if (!req.file) return badRequest(res, "No image selected.");
 
     const [rows] = await db.query(
-      `SELECT user_id
-       FROM User_Aerodeck
-       WHERE user_id=?`,
+      `SELECT user_id FROM users_heepit WHERE user_id = ?`,
       [user_id]
     );
 
-    if (!rows.length) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found."
-      });
-    }
+    if (!rows.length) return notFound(res, "User not found.");
 
-    // Upload / overwrite directly
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "AERODECK/USERS",
-          public_id: `user_${user_id}_profile`,
-          overwrite: true,
-          invalidate: true,
-          resource_type: "image"
-        },
-
-        (err, result) => {
-          if (err) return reject(err);
-          resolve(result);
-        }
-      );
-
-      stream.end(req.file.buffer);
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/USERS",
+      public_id: `user_${user_id}_profile`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
     });
 
-    // Save EXACT Cloudinary URL
     await db.query(
-      `UPDATE User_Aerodeck
-       SET profile_image=?,
-           profile_image_id=?
-       WHERE user_id=?`,
-      [
-        result.secure_url,
-        result.public_id,
-        user_id
-      ]
+      `UPDATE users_heepit SET profile_image = ?, profile_image_id = ?
+             WHERE user_id = ?`,
+      [result.secure_url, result.public_id, user_id]
     );
 
     const [updated] = await db.query(
-      `SELECT
-          user_id,
-          full_name,
-          mobile_number,
-          email,
-          profile_image,
-          profile_image_id,
-          is_mobile_verified,
-          is_email_verified
-       FROM User_Aerodeck
-       WHERE user_id=?`,
+      `SELECT user_id, full_name, mobile_number, email,
+                    profile_image, profile_image_id,
+                    is_mobile_verified, is_email_verified
+             FROM users_heepit WHERE user_id = ?`,
       [user_id]
     );
 
     return res.json({
       success: true,
       message: "Profile image updated successfully.",
-      user: updated[0]
+      user: updated[0],
     });
-
   } catch (err) {
-
-    console.error("PROFILE UPLOAD ERROR:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
+    return serverError(res, err, "PROFILE UPLOAD ERROR:");
   }
 };
+
 exports.removeUserProfile = async (req, res) => {
-
   try {
-
     const { session_token } = req.body;
 
-    const user_id = await getUserIdFromSession(session_token);
+    const user_id = await authenticate(session_token);
+    if (!user_id) return unauthorized(res);
 
-    if (!user_id) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid session."
-      });
-    }
     const [rows] = await db.query(
-      `SELECT profile_image_id
-             FROM User_Aerodeck
-             WHERE user_id=?`,
+      `SELECT profile_image_id FROM users_heepit WHERE user_id = ?`,
       [user_id]
     );
 
-    if (!rows.length) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found."
-      });
-    }
+    if (!rows.length) return notFound(res, "User not found.");
 
     if (rows[0].profile_image_id) {
-
-      await cloudinary.uploader.destroy(
-        rows[0].profile_image_id
-      );
-
+      await deleteFromCloudinary(rows[0].profile_image_id);
     }
 
     await db.query(
-      `UPDATE User_Aerodeck
-             SET
-                profile_image=NULL,
-                profile_image_id=NULL
-             WHERE user_id=?`,
+      `UPDATE users_heepit SET profile_image = NULL, profile_image_id = NULL
+             WHERE user_id = ?`,
       [user_id]
     );
 
     const [updated] = await db.query(
-      `SELECT *
-             FROM User_Aerodeck
-             WHERE user_id=?`,
+      `SELECT * FROM users_heepit WHERE user_id = ?`,
       [user_id]
     );
 
-    return res.json({
-      success: true,
-      user: updated[0]
-    });
-
+    return res.json({ success: true, user: updated[0] });
   } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      success: false,
-      message: err.message
-    });
-
+    return serverError(res, err);
   }
-
 };
-/* ============================================
-   VIDEO HERO UPLOAD
-   ============================================ */
 
 exports.uploadVideoHero = async (req, res) => {
   try {
+    if (!req.file) return badRequest(res, "No Video Selected");
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No Video Selected"
-      });
-    }
-
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "AERODECK/VIDEO_HERO",
-          resource_type: "video"   /* ✅ Video ke liye zaroori */
-        },
-        (err, result) => {
-          if (err) {
-            console.error("Cloudinary Error:", err);
-            return reject(err);
-          }
-          resolve(result);
-        }
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/VIDEO_HERO",
+      resource_type: "video",
     });
 
     return res.json({
       success: true,
       url: result.secure_url,
-      public_id: result.public_id
+      public_id: result.public_id,
     });
-
   } catch (err) {
-
-    console.error("VIDEO UPLOAD FAILED:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
-
+    return serverError(res, err, "VIDEO UPLOAD FAILED:");
   }
 };
-/* ============================================
-   SHOP VIDEO UPLOAD (vdo1, vdo2, vdo3)
-   ============================================ */
 
 exports.uploadShopVideo = async (req, res) => {
   try {
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No Video Selected"
-      });
-    }
+    if (!req.file) return badRequest(res, "No Video Selected");
 
     const { shop_id, video_no } = req.body;
 
-    if (!shop_id || !video_no) {
-      return res.status(400).json({
-        success: false,
-        message: "Shop ID & Video No Required"
-      });
-    }
+    if (!shop_id || !video_no)
+      return badRequest(res, "Shop ID & Video No Required");
 
-    const result = await new Promise((resolve, reject) => {
-
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "AERODECK/SHOP_VIDEOS",
-          public_id: `shop_${shop_id}_video${video_no}`,
-          overwrite: true,
-          invalidate: true,
-          resource_type: "video"   /* ✅ Video ke liye */
-        },
-        (err, result) => {
-          if (err) {
-            console.error("Cloudinary Error:", err);
-            return reject(err);
-          }
-          resolve(result);
-        }
-      );
-
-      stream.end(req.file.buffer);
-
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/SHOP_VIDEOS",
+      public_id: `shop_${shop_id}_video${video_no}`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "video",
     });
 
     return res.json({
       success: true,
       url: result.secure_url,
-      public_id: result.public_id
+      public_id: result.public_id,
     });
-
   } catch (err) {
-
-    console.error("SHOP VIDEO UPLOAD FAILED:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
-
+    return serverError(res, err, "SHOP VIDEO UPLOAD FAILED:");
   }
 };

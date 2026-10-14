@@ -1,462 +1,171 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
+async function authenticate(session_token) {
+    if (!session_token) return null;
+    return await getUserIdFromSession(session_token);
+}
+
+function getMinQuantity(productId) {
+    const id = String(productId);
+    return id.startsWith("G") || id.startsWith("S") ? 1 : 50;
+}
+
+function serverError(res, err, context = "Server error.") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
 
 exports.getCart = async (req, res) => {
-
     try {
+        const user_id = await authenticate(req.query.session_token);
 
-        const { session_token } = req.query;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const [cartRows] = await pool.query(
-
-            `SELECT *
-             FROM User_Cart_Aerodeck
-             WHERE user_id = ?
-             ORDER BY created_at DESC`,
-
+            `SELECT * FROM user_cart_heepit WHERE user_id = ? ORDER BY created_at DESC`,
             [user_id]
-
         );
 
-        const finalCart = [];
+        if (!cartRows.length) {
+            return res.json({ success: true, message: "Cart is empty.", data: [] });
+        }
+
+        const giftIds = [];
+        const premiumIds = [];
+        const shopIds = [];
+        const cardIds = [];
 
         for (const cart of cartRows) {
-
             const id = String(cart.product_id);
-
-            let item = null;
-
-            if (id.startsWith("G")) {
-
-                const [rows] = await pool.query(
-
-                    `SELECT *
-                     FROM Gifts_Aerodeck
-                     WHERE gift_id = ?`,
-
-                    [id]
-
-                );
-
-                if (rows.length > 0) {
-
-                    item = rows[0];
-
-                }
-
-            }
-
-            else if (id.startsWith("P")) {
-
-                const [rows] = await pool.query(
-
-                    `SELECT *
-                     FROM Premium_Aerodeck
-                     WHERE premium_id = ?`,
-
-                    [id]
-
-                );
-
-                if (rows.length > 0) {
-
-                    item = rows[0];
-
-                }
-
-            }
-
-            else if (id.startsWith("S")) {
-
-                const [rows] = await pool.query(
-
-                    `SELECT *
-                     FROM Shop_Aerodeck
-                     WHERE shop_id = ?`,
-
-                    [id]
-
-                );
-
-                if (rows.length > 0) {
-
-                    item = rows[0];
-
-                }
-
-            }
-
-            else {
-
-                const numericId = Number(id);
-
-                if (!Number.isNaN(numericId)) {
-
-                    const [rows] = await pool.query(
-
-                        `SELECT 
-                p.*,
-                d.delivery
-             FROM Products_Aerodeck p
-             LEFT JOIN User_Product_Detail d
-                ON p.product_id = d.product_id
-             WHERE p.product_id = ?`,
-
-                        [numericId]
-
-                    );
-
-                    if (rows.length > 0) {
-
-                        item = rows[0];
-
-                    }
-
-                }
-
-            }
-
-            if (item) {
-
-                const [detailRows] = await pool.query(
-
-                    `SELECT delivery
-         FROM User_Product_Detail
-         WHERE product_id = ?`,
-
-                    [id]
-
-                );
-
-                if (detailRows.length > 0) {
-
-                    item.delivery = detailRows[0].delivery;
-
-                }
-
-                finalCart.push({
-
-                    ...item,
-
-                    cart_id: cart.cart_id,
-
-                    quantity: cart.quantity,
-
-                    product_id: cart.product_id,
-
-                    created_at: cart.created_at
-
-                });
-
-            }
-
+            if (id.startsWith("G")) giftIds.push(id);
+            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("S")) shopIds.push(id);
+            else cardIds.push(Number(id));
         }
 
-        res.json({
+        const [[gifts], [premiums], [shops], [cards]] = await Promise.all([
+            giftIds.length
+                ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
+                : Promise.resolve([[]]),
+            premiumIds.length
+                ? pool.query(`SELECT * FROM medical_heepit WHERE premium_id IN (?)`, [premiumIds])
+                : Promise.resolve([[]]),
+            shopIds.length
+                ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
+                : Promise.resolve([[]]),
+            cardIds.length
+                ? pool.query(
+                    `SELECT p.*, d.delivery
+                     FROM cards_heepit p
+                     LEFT JOIN product_details_heepit d ON p.product_id = d.product_id
+                     WHERE p.product_id IN (?)`,
+                    [cardIds]
+                )
+                : Promise.resolve([[]]),
+        ]);
 
-            success: true,
+        const giftsMap = new Map(gifts.map((g) => [String(g.gift_id), g]));
+        const premiumsMap = new Map(premiums.map((p) => [String(p.premium_id), p]));
+        const shopsMap = new Map(shops.map((s) => [String(s.shop_id), s]));
+        const cardsMap = new Map(cards.map((c) => [String(c.product_id), c]));
 
-            message: "Cart fetched successfully.",
+        const finalCart = cartRows
+            .map((cart) => {
+                const id = String(cart.product_id);
+                let item = null;
 
-            data: finalCart
+                if (id.startsWith("G")) item = giftsMap.get(id);
+                else if (id.startsWith("P")) item = premiumsMap.get(id);
+                else if (id.startsWith("S")) item = shopsMap.get(id);
+                else item = cardsMap.get(id);
 
-        });
+                if (!item) return null;
 
+                return {
+                    ...item,
+                    cart_id: cart.cart_id,
+                    quantity: cart.quantity,
+                    product_id: cart.product_id,
+                    created_at: cart.created_at,
+                };
+            })
+            .filter(Boolean);
+
+        return res.json({ success: true, message: "Cart fetched successfully.", data: finalCart });
+    } catch (err) {
+        return serverError(res, err, "Cart fetch failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
-// ==============================
-// ADD TO CART
-// ==============================
 
 exports.addToCart = async (req, res) => {
-
     try {
-        const {
+        const { session_token, product_id, quantity } = req.body;
 
-            session_token,
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-            product_id,
-
-            quantity
-
-        } = req.body;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
-        let finalQuantity;
-
-        const id = String(product_id);
-
-        if (id.startsWith("G") || id.startsWith("S")) {
-
-            // Gift + Shop
-            finalQuantity = quantity < 1 ? 1 : quantity;
-
-        } else {
-
-            // Cards + Premium
-            finalQuantity = quantity < 50 ? 50 : quantity;
-
-        }
+        const finalQuantity = Math.max(quantity, getMinQuantity(product_id));
 
         const [exists] = await pool.query(
-
-            `SELECT *
-             FROM User_Cart_Aerodeck
-             WHERE user_id = ?
-             AND product_id = ?`,
-
+            `SELECT cart_id FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
             [user_id, product_id]
-
         );
 
-        if (exists.length > 0) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Product already added."
-
-            });
-
-        }
+        if (exists.length > 0)
+            return res.json({ success: false, message: "Product already added." });
 
         await pool.query(
-
-            `INSERT INTO User_Cart_Aerodeck
-            (user_id, product_id, quantity)
-            VALUES (?, ?, ?)`,
-
-            [
-
-                user_id,
-
-                product_id,
-
-                finalQuantity
-
-            ]
-
+            `INSERT INTO user_cart_heepit (user_id, product_id, quantity) VALUES (?, ?, ?)`,
+            [user_id, product_id, finalQuantity]
         );
 
-        res.json({
-
-            success: true,
-
-            message: "Product added to cart."
-
-        });
-
+        return res.json({ success: true, message: "Product added to cart." });
+    } catch (err) {
+        return serverError(res, err, "Add to cart failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
-
-// ==============================
-// UPDATE QUANTITY
-// ==============================
 
 exports.updateQuantity = async (req, res) => {
-
     try {
+        const { session_token, product_id, quantity } = req.body;
 
-        const {
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-            session_token,
-
-            product_id,
-
-            quantity
-
-        } = req.body;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
-
-        let finalQuantity;
-        const id = String(product_id);
-
-        if (id.startsWith("G") || id.startsWith("S")) {
-            finalQuantity = quantity < 1 ? 1 : quantity;
-        } else {
-            finalQuantity = quantity < 50 ? 50 : quantity;
-        }
+        const finalQuantity = Math.max(quantity, getMinQuantity(product_id));
 
         await pool.query(
-
-            `UPDATE User_Cart_Aerodeck
-             SET quantity = ?
-             WHERE user_id = ?
-             AND product_id = ?`,
-
-            [
-
-                finalQuantity,
-
-                user_id,
-
-                product_id
-
-            ]
-
+            `UPDATE user_cart_heepit SET quantity = ? WHERE user_id = ? AND product_id = ?`,
+            [finalQuantity, user_id, product_id]
         );
 
-        res.json({
-
-            success: true,
-
-            message: "Quantity updated."
-
-        });
-
+        return res.json({ success: true, message: "Quantity updated." });
+    } catch (err) {
+        return serverError(res, err, "Update quantity failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
 
-// ==============================
-// REMOVE PRODUCT
-// ==============================
-
 exports.removeFromCart = async (req, res) => {
-
     try {
-
         const { session_token } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const { productId } = req.params;
 
         await pool.query(
-
-            `DELETE FROM User_Cart_Aerodeck
-             WHERE user_id = ?
-             AND product_id = ?`,
-
-            [
-
-                user_id,
-
-                productId
-
-            ]
-
+            `DELETE FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
+            [user_id, productId]
         );
 
-        res.json({
-
-            success: true,
-
-            message: "Product removed from cart."
-
-        });
-
+        return res.json({ success: true, message: "Product removed from cart." });
+    } catch (err) {
+        return serverError(res, err, "Remove from cart failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };

@@ -18,7 +18,7 @@ offer_image2,
 offer_image3,
 offer_status,
 offer_expired_at
-FROM Products_Offer_Aerodeck
+FROM offers_heepit
 ORDER BY offer_id DESC;
         `);
 

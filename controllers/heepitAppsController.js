@@ -18,7 +18,7 @@ exports.getApps = async (req, res) => {
                 app_url,
                 status,
                 updated_at
-             FROM HEEPITAPPS
+             FROM heepit_apps
              ORDER BY id DESC`
 
         );
@@ -125,7 +125,7 @@ exports.createApp = async (req, res) => {
             const stream =
                 cloudinary.uploader.upload_stream(
                     {
-                        folder: "AERODECK/HEEPITAPPS"
+                        folder: "AERODECK/heepit_apps"
                     },
 
                     (err, result) => {
@@ -156,7 +156,7 @@ exports.createApp = async (req, res) => {
 
         const [insertResult] = await pool.query(
 
-            `INSERT INTO HEEPITAPPS
+            `INSERT INTO heepit_apps
             (
                 appname,
                 app_description,
@@ -231,7 +231,7 @@ exports.deleteApp = async (req, res) => {
         }
 
         const [result] = await pool.query(
-            `DELETE FROM HEEPITAPPS
+            `DELETE FROM heepit_apps
              WHERE id = ?`,
             [id]
         );

@@ -12,22 +12,22 @@ const getDetails = async (req, res) => {
         switch (type.toLowerCase()) {
 
             case "gift":
-                table = "Gifts_Aerodeck";
+                table = "food_heepit";
                 idColumn = "gift_id";
                 break;
 
             case "premium":
-                table = "Premium_Aerodeck";
+                table = "medical_heepit";
                 idColumn = "premium_id";
                 break;
 
             case "card":
-                table = "Products_Aerodeck";
+                table = "cards_heepit";
                 idColumn = "product_id";
                 break;
 
             case "shop":
-                table = "Shop_Aerodeck";
+                table = "shop_heepit";
                 idColumn = "shop_id";
                 break;
 
@@ -54,7 +54,7 @@ const getDetails = async (req, res) => {
         ) {
 
             const [detailRows] = await db.query(
-                `SELECT * FROM User_Product_Detail
+                `SELECT * FROM product_details_heepit
          WHERE product_id = ?
          LIMIT 1`,
                 [id]

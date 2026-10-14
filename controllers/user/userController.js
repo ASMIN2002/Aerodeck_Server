@@ -1,95 +1,69 @@
 const db = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
+const SAFE_USER_FIELDS = `
+    user_id,
+    full_name,
+    mobile_number,
+    whatsapp_number,
+    is_whatsapp_verified,
+    is_mobile_verified,
+    email,
+    is_email_verified,
+    profile_image
+`;
+
+async function authenticate(session_token) {
+    if (!session_token) return { error: "Session token is required.", status: 401 };
+    const user_id = await getUserIdFromSession(session_token);
+    if (!user_id) return { error: "Invalid or expired session.", status: 401 };
+    return { user_id };
+}
+
+async function getSafeUser(user_id) {
+    const [rows] = await db.query(
+        `SELECT ${SAFE_USER_FIELDS} FROM users_heepit WHERE user_id = ? LIMIT 1`,
+        [user_id]
+    );
+    return rows[0] || null;
+}
+
+function serverError(res, err, context = "Server error.") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
+
 exports.getProfile = async (req, res) => {
     try {
-        const { session_token } = req.body;
+        const auth = await authenticate(req.body.session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
-
-        const [rows] = await db.query(
-            `SELECT * FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
-            [user_id]
-        );
-
-        return res.json({
-            success: true,
-            user: rows[0]
-        });
-
+        const user = await getSafeUser(auth.user_id);
+        return res.json({ success: true, user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Profile fetch failed.");
     }
 };
-
 
 exports.updateName = async (req, res) => {
     try {
         const { session_token, full_name } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!full_name || full_name.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Full name is required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!full_name || !full_name.trim())
+            return res.status(400).json({ success: false, message: "Full name is required." });
 
         await db.query(
-            `UPDATE User_Aerodeck SET full_name = ? WHERE user_id = ?`,
-            [full_name.trim(), user_id]
+            `UPDATE users_heepit SET full_name = ? WHERE user_id = ?`,
+            [full_name.trim(), auth.user_id]
         );
 
-        const [rows] = await db.query(
-            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
-            [user_id]
-        );
-
-        return res.json({
-            success: true,
-            message: "Name updated successfully.",
-            user: rows[0]
-        });
-
+        const user = await getSafeUser(auth.user_id);
+        return res.json({ success: true, message: "Name updated successfully.", user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Server error."
-        });
+        return serverError(res, err);
     }
 };
 
@@ -97,654 +71,292 @@ exports.updateWhatsapp = async (req, res) => {
     try {
         const { session_token, whatsapp_number } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!whatsapp_number || !/^\d{10}$/.test(whatsapp_number)) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid 10 digit WhatsApp number is required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!whatsapp_number || !/^\d{10}$/.test(whatsapp_number))
+            return res.status(400).json({ success: false, message: "Valid 10 digit WhatsApp number is required." });
 
         const [countRows] = await db.query(
-            `SELECT COUNT(*) AS total 
-             FROM User_Aerodeck
-             WHERE whatsapp_number = ?`,
+            `SELECT COUNT(*) AS total FROM users_heepit WHERE whatsapp_number = ?`,
             [whatsapp_number]
         );
 
-        const existingCount = Number(countRows[0].total || 0);
-
-        if (existingCount >= 4) {
-            return res.status(409).json({
-                success: false,
-                message: "This WhatsApp number is already registered in 4 accounts."
-            });
-        }
+        if (Number(countRows[0].total || 0) >= 4)
+            return res.status(409).json({ success: false, message: "This WhatsApp number is already registered in 4 accounts." });
 
         await db.query(
-            `UPDATE User_Aerodeck
-             SET whatsapp_number = ?,
-                 is_whatsapp_verified = 0
-             WHERE user_id = ?`,
-            [whatsapp_number, user_id]
+            `UPDATE users_heepit SET whatsapp_number = ?, is_whatsapp_verified = 0 WHERE user_id = ?`,
+            [whatsapp_number, auth.user_id]
         );
 
-        const [rows] = await db.query(
-            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
-            [user_id]
-        );
-
-        return res.json({
-            success: true,
-            message: "WhatsApp number saved.",
-            user: rows[0]
-        });
-
+        const user = await getSafeUser(auth.user_id);
+        return res.json({ success: true, message: "WhatsApp number saved.", user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Server error."
-        });
+        return serverError(res, err);
     }
 };
-
 
 exports.updateMobile = async (req, res) => {
     try {
         const { session_token, mobile_number } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!mobile_number || !/^\d{10}$/.test(mobile_number)) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid 10 digit mobile number is required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!mobile_number || !/^\d{10}$/.test(mobile_number))
+            return res.status(400).json({ success: false, message: "Valid 10 digit mobile number is required." });
 
         const [countRows] = await db.query(
-            `SELECT COUNT(*) AS total 
-             FROM User_Aerodeck
-             WHERE mobile_number = ?`,
+            `SELECT COUNT(*) AS total FROM users_heepit WHERE mobile_number = ?`,
             [mobile_number]
         );
 
-        const existingCount = Number(countRows[0].total || 0);
-
-        if (existingCount >= 4) {
-            return res.status(409).json({
-                success: false,
-                message: "This mobile number is already registered in 4 accounts."
-            });
-        }
+        if (Number(countRows[0].total || 0) >= 4)
+            return res.status(409).json({ success: false, message: "This mobile number is already registered in 4 accounts." });
 
         await db.query(
-            `UPDATE User_Aerodeck
-             SET mobile_number = ?,
-                 is_mobile_verified = 0
-             WHERE user_id = ?`,
-            [mobile_number, user_id]
+            `UPDATE users_heepit SET mobile_number = ?, is_mobile_verified = 0 WHERE user_id = ?`,
+            [mobile_number, auth.user_id]
         );
 
-        const [rows] = await db.query(
-            `SELECT * FROM User_Aerodeck WHERE user_id = ?`,
-            [user_id]
-        );
-
-        return res.json({
-            success: true,
-            message: "Mobile number saved.",
-            user: rows[0]
-        });
-
+        const user = await getSafeUser(auth.user_id);
+        return res.json({ success: true, message: "Mobile number saved.", user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Server error."
-        });
+        return serverError(res, err);
     }
 };
-
 
 exports.getWhatsAppOrderData = async (req, res) => {
     try {
         const { session_token, product_id } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!product_id) {
-            return res.status(400).json({
-                success: false,
-                message: "Product ID is required."
-            });
-        }
+        if (!product_id)
+            return res.status(400).json({ success: false, message: "Product ID is required." });
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
-
-        return res.json({
-            success: true,
-            user_id: user_id,
-            product_id: product_id
-        });
-
+        return res.json({ success: true, user_id: auth.user_id, product_id });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Server error."
-        });
+        return serverError(res, err);
     }
 };
-
 
 exports.sendEmailOtp = async (req, res) => {
     try {
         const { session_token, email } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!email || email.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Email is required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!email || !email.trim())
+            return res.status(400).json({ success: false, message: "Email is required." });
 
         const cleanEmail = email.trim().toLowerCase();
 
-        const [existingUsers] = await db.query(
-            `SELECT user_id FROM User_Aerodeck
-             WHERE email = ? AND user_id != ? LIMIT 1`,
-            [cleanEmail, user_id]
+        const [existing] = await db.query(
+            `SELECT user_id FROM users_heepit WHERE email = ? AND user_id != ? LIMIT 1`,
+            [cleanEmail, auth.user_id]
         );
 
-        if (existingUsers.length > 0) {
-            return res.status(409).json({
-                success: false,
-                message: "This email is already registered."
-            });
-        }
+        if (existing.length > 0)
+            return res.status(409).json({ success: false, message: "This email is already registered." });
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-        const [otpResult] = await db.query(
-            `UPDATE User_OTP_Aerodeck
-             SET email_otp = ?, email_otp_expires_at = ?
-             WHERE user_id = ?`,
-            [otp, expiresAt, user_id]
+        const [result] = await db.query(
+            `UPDATE user_otp_heepit SET email_otp = ?, email_otp_expires_at = ? WHERE user_id = ?`,
+            [otp, expiresAt, auth.user_id]
         );
 
-        if (otpResult.affectedRows === 0) {
+        if (result.affectedRows === 0) {
             await db.query(
-                `INSERT INTO User_OTP_Aerodeck
-                 (user_id, email_otp, email_otp_expires_at)
-                 VALUES (?, ?, ?)`,
-                [user_id, otp, expiresAt]
+                `INSERT INTO user_otp_heepit (user_id, email_otp, email_otp_expires_at) VALUES (?, ?, ?)`,
+                [auth.user_id, otp, expiresAt]
             );
         }
 
         const { sendEmailOtp } = require("../../services/emailService");
-
         await sendEmailOtp(cleanEmail, otp);
 
-        return res.json({
-            success: true,
-            message: "OTP sent successfully."
-        });
-
+        return res.json({ success: true, message: "OTP sent successfully." });
     } catch (err) {
-        console.error("SEND EMAIL OTP ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message,
-            error: err.code || "UNKNOWN_ERROR"
-        });
+        return serverError(res, err, "Failed to send OTP.");
     }
 };
-
 
 exports.verifyEmailOtp = async (req, res) => {
     try {
         const { session_token, email, otp } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token is required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!email || !otp) {
-            return res.status(400).json({
-                success: false,
-                message: "Email and OTP are required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!email || !otp)
+            return res.status(400).json({ success: false, message: "Email and OTP are required." });
 
         const cleanEmail = email.trim().toLowerCase();
 
         const [rows] = await db.query(
-            `SELECT email_otp, email_otp_expires_at
-             FROM User_OTP_Aerodeck
-             WHERE user_id = ? LIMIT 1`,
-            [user_id]
+            `SELECT email_otp, email_otp_expires_at FROM user_otp_heepit WHERE user_id = ? LIMIT 1`,
+            [auth.user_id]
         );
 
-        if (!rows.length) {
-            return res.status(400).json({
-                success: false,
-                message: "OTP not found."
-            });
-        }
+        if (!rows.length)
+            return res.status(400).json({ success: false, message: "OTP not found." });
 
         const otpData = rows[0];
 
-        if (!otpData.email_otp || otpData.email_otp !== String(otp)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid OTP."
-            });
-        }
+        if (!otpData.email_otp || otpData.email_otp !== String(otp))
+            return res.status(400).json({ success: false, message: "Invalid OTP." });
 
-        if (
-            !otpData.email_otp_expires_at ||
-            new Date() > new Date(otpData.email_otp_expires_at)
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "OTP expired."
-            });
-        }
+        if (!otpData.email_otp_expires_at || new Date() > new Date(otpData.email_otp_expires_at))
+            return res.status(400).json({ success: false, message: "OTP expired." });
 
         await db.query(
-            `UPDATE User_Aerodeck
-             SET email = ?, is_email_verified = 1
-             WHERE user_id = ?`,
-            [cleanEmail, user_id]
+            `UPDATE users_heepit SET email = ?, is_email_verified = 1 WHERE user_id = ?`,
+            [cleanEmail, auth.user_id]
         );
 
-        const [updatedRows] = await db.query(
-            `SELECT * FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
-            [user_id]
-        );
-
-        return res.json({
-            success: true,
-            message: "Email verified successfully.",
-            user: updatedRows[0]
-        });
-
+        const user = await getSafeUser(auth.user_id);
+        return res.json({ success: true, message: "Email verified successfully.", user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: "Verification failed."
-        });
+        return serverError(res, err, "Verification failed.");
     }
 };
-
 
 exports.getNotificationCount = async (req, res) => {
     try {
-        const [rows] = await db.query(
-            `SELECT COUNT(*) AS total FROM heepit_notification`
-        );
-
-        return res.json({
-            success: true,
-            count: rows[0].total
-        });
-
+        const [rows] = await db.query(`SELECT COUNT(*) AS total FROM heepit_notification`);
+        return res.json({ success: true, count: rows[0].total });
     } catch (err) {
-        console.error("NOTIF COUNT ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Notification count failed.");
     }
 };
-
 
 exports.getAllNotifications = async (req, res) => {
     try {
         const [rows] = await db.query(
-            `SELECT id, notification, status, created_at
-             FROM heepit_notification
-             ORDER BY created_at DESC`
+            `SELECT id, notification, status, created_at FROM heepit_notification ORDER BY created_at DESC`
         );
-
-        return res.json({
-            success: true,
-            data: rows
-        });
-
+        return res.json({ success: true, data: rows });
     } catch (err) {
-        console.error("NOTIF FETCH ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Notifications fetch failed.");
     }
 };
+
 exports.insertNotification = async (req, res) => {
     try {
         const { notification } = req.body;
 
-        if (!notification || notification.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "Notification text is required."
-            });
-        }
+        if (!notification || !notification.trim())
+            return res.status(400).json({ success: false, message: "Notification text is required." });
 
         const cleanText = notification.trim();
 
-        if (cleanText.length > 200) {
-            return res.status(400).json({
-                success: false,
-                message: "Maximum 200 characters allowed."
-            });
-        }
+        if (cleanText.length > 200)
+            return res.status(400).json({ success: false, message: "Maximum 200 characters allowed." });
 
         const [result] = await db.query(
             `INSERT INTO heepit_notification (notification) VALUES (?)`,
             [cleanText]
         );
 
-        return res.json({
-            success: true,
-            message: "Notification inserted successfully.",
-            id: result.insertId
-        });
-
+        return res.json({ success: true, message: "Notification inserted successfully.", id: result.insertId });
     } catch (err) {
-        console.error("NOTIF INSERT ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Notification insert failed.");
     }
 };
+
 exports.toggleNotificationStatus = async (req, res) => {
     try {
         const { id, status } = req.body;
 
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                message: "Notification ID is required."
-            });
-        }
+        if (!id)
+            return res.status(400).json({ success: false, message: "Notification ID is required." });
 
         await db.query(
             `UPDATE heepit_notification SET status = ? WHERE id = ?`,
             [status ? 1 : 0, id]
         );
 
-        return res.json({
-            success: true,
-            message: "Status updated."
-        });
-
+        return res.json({ success: true, message: "Status updated." });
     } catch (err) {
-        console.error("NOTIF STATUS ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Status update failed.");
     }
 };
+
 exports.getUserDetails = async (req, res) => {
     try {
-        const { session_token } = req.query;
+        const auth = await authenticate(req.query.session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!session_token) {
-            return res.status(400).json({
-                success: false,
-                message: "Session token required."
-            });
-        }
+        const user = await getSafeUser(auth.user_id);
 
-        const user_id = await getUserIdFromSession(session_token);
+        if (!user)
+            return res.status(404).json({ success: false, message: "User not found." });
 
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
-
-        const [rows] = await db.query(
-            `SELECT 
-                user_id,
-                full_name,
-                mobile_number,
-                whatsapp_number,
-                is_whatsapp_verified,
-                is_mobile_verified,
-                email,
-                is_email_verified,
-                profile_image
-             FROM User_Aerodeck
-             WHERE user_id = ? LIMIT 1`,
-            [user_id]
-        );
-
-        if (!rows.length) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found."
-            });
-        }
-
-        return res.json({
-            success: true,
-            data: rows[0]
-        });
-
+        return res.json({ success: true, data: user });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err);
     }
 };
 
 exports.getAdminNotifications = async (req, res) => {
     try {
         const [rows] = await db.query(
-            `SELECT id, notification, status, created_at
-             FROM heepit_notification
-             WHERE status = 0
-             ORDER BY created_at DESC`
+            `SELECT id, notification, status, created_at FROM heepit_notification WHERE status = 0 ORDER BY created_at DESC`
         );
-
-        return res.json({
-            success: true,
-            data: rows
-        });
-
+        return res.json({ success: true, data: rows });
     } catch (err) {
-        console.error("ADMIN NOTIF FETCH ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Admin notifications fetch failed.");
     }
 };
 
-/* ============================================
-   GET PROCESSING UPDATE FOR ITEM
-   ============================================ */
 exports.getProcessingUpdate = async (req, res) => {
     try {
         const { item_id } = req.params;
 
-        if (!item_id) {
-            return res.status(400).json({
-                success: false,
-                message: "item_id required."
-            });
-        }
+        if (!item_id)
+            return res.status(400).json({ success: false, message: "item_id required." });
 
         const [[row]] = await db.query(
-            `SELECT id, item_id, processing_update
-             FROM processing_updates
-             WHERE item_id = ?
-             LIMIT 1`,
+            `SELECT id, item_id, processing_update FROM processing_updates WHERE item_id = ? LIMIT 1`,
             [item_id]
         );
 
-        return res.json({
-            success: true,
-            data: row || null
-        });
-
+        return res.json({ success: true, data: row || null });
     } catch (err) {
-        console.error("GET PROCESSING ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Processing update fetch failed.");
     }
 };
-/* ============================================
-   SAVE FCM TOKEN
-   ============================================ */
+
 exports.saveFcmToken = async (req, res) => {
     try {
         const { session_token, fcm_token } = req.body;
 
-        if (!session_token) {
-            return res.status(401).json({
-                success: false,
-                message: "Session token required."
-            });
-        }
+        const auth = await authenticate(session_token);
+        if (auth.error) return res.status(auth.status).json({ success: false, message: auth.error });
 
-        if (!fcm_token || fcm_token.trim() === "") {
-            return res.status(400).json({
-                success: false,
-                message: "FCM token required."
-            });
-        }
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session."
-            });
-        }
+        if (!fcm_token || !fcm_token.trim())
+            return res.status(400).json({ success: false, message: "FCM token required." });
 
         const cleanToken = fcm_token.trim();
 
-        /* ============================================
-           STEP 1: Same token wale doosre users ka token NULL karo
-           ============================================ */
-        const [clearResult] = await db.query(
-            `UPDATE User_Aerodeck
-             SET fcm_token = NULL
-             WHERE fcm_token = ?
-               AND user_id != ?`,
-            [cleanToken, user_id]
-        );
-
-        if (clearResult.affectedRows > 0) {
-            console.log(
-                `Cleared same token from ${clearResult.affectedRows} other user(s)`
-            );
-        }
-
-        /* ============================================
-           STEP 2: Current user ko token assign karo
-           ============================================ */
         await db.query(
-            `UPDATE User_Aerodeck
-             SET fcm_token = ?
-             WHERE user_id = ?`,
-            [cleanToken, user_id]
+            `UPDATE users_heepit SET fcm_token = NULL WHERE fcm_token = ? AND user_id != ?`,
+            [cleanToken, auth.user_id]
         );
 
-        return res.json({
-            success: true,
-            message: "FCM token saved."
-        });
+        await db.query(
+            `UPDATE users_heepit SET fcm_token = ? WHERE user_id = ?`,
+            [cleanToken, auth.user_id]
+        );
 
+        return res.json({ success: true, message: "FCM token saved." });
     } catch (err) {
-        console.error("SAVE FCM TOKEN ERROR:", err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err, "Failed to save FCM token.");
     }
 };

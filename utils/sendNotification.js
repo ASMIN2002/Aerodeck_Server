@@ -5,7 +5,7 @@ const pool = require("../config/db");
 async function sendNotificationToUser(user_id, title, body, data = {}, image = "") {
     try {
         const [[user]] = await pool.query(
-            `SELECT fcm_token FROM User_Aerodeck WHERE user_id = ? LIMIT 1`,
+            `SELECT fcm_token FROM users_heepit WHERE user_id = ? LIMIT 1`,
             [user_id]
         );
 
@@ -43,7 +43,7 @@ async function sendNotificationToUser(user_id, title, body, data = {}, image = "
             err.code === "messaging/registration-token-not-registered"
         ) {
             await pool.query(
-                `UPDATE User_Aerodeck SET fcm_token = NULL WHERE user_id = ?`,
+                `UPDATE users_heepit SET fcm_token = NULL WHERE user_id = ?`,
                 [user_id]
             );
             console.log(`Removed invalid token for user ${user_id}`);
@@ -59,7 +59,7 @@ async function sendNotificationToUser(user_id, title, body, data = {}, image = "
 async function sendNotificationToAll(title, body, data = {}) {
     try {
         const [users] = await pool.query(
-            `SELECT user_id, fcm_token FROM User_Aerodeck
+            `SELECT user_id, fcm_token FROM users_heepit
              WHERE fcm_token IS NOT NULL`
         );
 
@@ -105,7 +105,7 @@ async function sendNotificationToAll(title, body, data = {}) {
 
             if (invalidTokens.length > 0) {
                 await pool.query(
-                    `UPDATE User_Aerodeck
+                    `UPDATE users_heepit
                      SET fcm_token = NULL
                      WHERE fcm_token IN (?)`,
                     [invalidTokens]

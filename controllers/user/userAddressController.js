@@ -1,486 +1,234 @@
 const db = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
+const MAX_ADDRESSES = 4;
+const SERVICEABLE_DISTRICTS = ["balasore", "baleshwar", "baleswar"];
+
+async function authenticate(session_token) {
+    if (!session_token) return null;
+    return await getUserIdFromSession(session_token);
+}
+
+function serverError(res, err, context = "Server Error") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
+
+function unauthorized(res) {
+    return res.status(401).json({ success: false, message: "Invalid or expired session." });
+}
+
+function extractAddressFields(body) {
+    return {
+        full_name: body.full_name,
+        mobile_number: body.mobile_number,
+        house_flat: body.house_flat,
+        area_street: body.area_street,
+        landmark: body.landmark,
+        pincode: body.pincode,
+        city: body.city,
+        state: body.state,
+        latitude: body.latitude,
+        longitude: body.longitude,
+        address_type: body.address_type,
+    };
+}
+
 const getAddresses = async (req, res) => {
-
     try {
-
-        const { session_token } = req.query;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(req.query.session_token);
+        if (!user_id) return unauthorized(res);
 
         const [rows] = await db.query(
-
-            `SELECT *
-             FROM User_Address_Aerodeck
-             WHERE user_id = ?
-             ORDER BY address_id ASC`,
-
+            `SELECT * FROM user_address_heepit WHERE user_id = ? ORDER BY address_id ASC`,
             [user_id]
-
         );
 
-        res.json({
-            success: true,
-            data: rows
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+        return res.json({ success: true, data: rows });
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const addAddress = async (req, res) => {
-
     try {
+        const { session_token } = req.body;
 
-        const {
-            session_token,
-            full_name,
-            mobile_number,
-            house_flat,
-            area_street,
-            landmark,
-            pincode,
-            city,
-            state,
-            latitude,
-            longitude,
-            address_type
-        } = req.body;
+        const user_id = await authenticate(session_token);
+        if (!user_id) return unauthorized(res);
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
-
-        // Maximum 4 addresses check
         const [count] = await db.query(
-
-            `SELECT COUNT(*) AS total
-             FROM User_Address_Aerodeck
-             WHERE user_id = ?`,
-
+            `SELECT COUNT(*) AS total FROM user_address_heepit WHERE user_id = ?`,
             [user_id]
-
         );
 
-        if (count[0].total >= 4) {
+        if (count[0].total >= MAX_ADDRESSES)
+            return res.status(400).json({ success: false, message: `Maximum ${MAX_ADDRESSES} addresses allowed.` });
 
-            return res.status(400).json({
-                success: false,
-                message: "Maximum 4 addresses allowed."
-            });
-
-        }
-
-        // First address becomes primary
         const is_primary = count[0].total === 0 ? 1 : 0;
+        const fields = extractAddressFields(req.body);
 
         await db.query(
-
-            `INSERT INTO User_Address_Aerodeck
-            (
-                user_id,
-                full_name,
-                mobile_number,
-                house_flat,
-                area_street,
-                landmark,
-                pincode,
-                city,
-                state,
-                latitude,
-                longitude,
-                address_type,
-                is_primary
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-
+            `INSERT INTO user_address_heepit
+             (user_id, full_name, mobile_number, house_flat, area_street, landmark,
+              pincode, city, state, latitude, longitude, address_type, is_primary)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 user_id,
-                full_name,
-                mobile_number,
-                house_flat,
-                area_street,
-                landmark,
-                pincode,
-                city,
-                state,
-                latitude,
-                longitude,
-                address_type,
-                is_primary
+                fields.full_name,
+                fields.mobile_number,
+                fields.house_flat,
+                fields.area_street,
+                fields.landmark,
+                fields.pincode,
+                fields.city,
+                fields.state,
+                fields.latitude,
+                fields.longitude,
+                fields.address_type,
+                is_primary,
             ]
-
         );
 
-        res.json({
-            success: true,
-            message: "Address added successfully."
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+        return res.json({ success: true, message: "Address added successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const updateAddress = async (req, res) => {
-
     try {
-
         const { address_id } = req.params;
 
-        const {
-            session_token,
-            full_name,
-            mobile_number,
-            house_flat,
-            area_street,
-            landmark,
-            pincode,
-            city,
-            state,
-            latitude,
-            longitude,
-            address_type
-        } = req.body;
+        const user_id = await authenticate(req.body.session_token);
+        if (!user_id) return unauthorized(res);
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const fields = extractAddressFields(req.body);
 
         const [result] = await db.query(
-
-            `UPDATE User_Address_Aerodeck
-             SET
-                full_name = ?,
-                mobile_number = ?,
-                house_flat = ?,
-                area_street = ?,
-                landmark = ?,
-                pincode = ?,
-                city = ?,
-                state = ?,
-                latitude = ?,
-                longitude = ?,
-                address_type = ?
-             WHERE address_id = ?
-             AND user_id = ?`,
-
+            `UPDATE user_address_heepit
+             SET full_name = ?, mobile_number = ?, house_flat = ?, area_street = ?,
+                 landmark = ?, pincode = ?, city = ?, state = ?,
+                 latitude = ?, longitude = ?, address_type = ?
+             WHERE address_id = ? AND user_id = ?`,
             [
-                full_name,
-                mobile_number,
-                house_flat,
-                area_street,
-                landmark,
-                pincode,
-                city,
-                state,
-                latitude,
-                longitude,
-                address_type,
+                fields.full_name,
+                fields.mobile_number,
+                fields.house_flat,
+                fields.area_street,
+                fields.landmark,
+                fields.pincode,
+                fields.city,
+                fields.state,
+                fields.latitude,
+                fields.longitude,
+                fields.address_type,
                 address_id,
-                user_id
+                user_id,
             ]
-
         );
 
-        if (result.affectedRows === 0) {
+        if (result.affectedRows === 0)
+            return res.status(404).json({ success: false, message: "Address not found." });
 
-            return res.status(404).json({
-                success: false,
-                message: "Address not found."
-            });
-
-        }
-
-        res.json({
-            success: true,
-            message: "Address updated successfully."
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+        return res.json({ success: true, message: "Address updated successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const deleteAddress = async (req, res) => {
-
     try {
-
         const { address_id } = req.params;
-        const { session_token } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
+        const user_id = await authenticate(req.body.session_token);
+        if (!user_id) return unauthorized(res);
 
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
-
-        // Check address
         const [rows] = await db.query(
-
-            `SELECT is_primary
-             FROM User_Address_Aerodeck
-             WHERE address_id = ?
-             AND user_id = ?`,
-
+            `SELECT is_primary FROM user_address_heepit WHERE address_id = ? AND user_id = ?`,
             [address_id, user_id]
-
         );
 
-        if (rows.length === 0) {
-
-            return res.status(404).json({
-                success: false,
-                message: "Address not found."
-            });
-
-        }
+        if (rows.length === 0)
+            return res.status(404).json({ success: false, message: "Address not found." });
 
         const wasPrimary = rows[0].is_primary;
 
-        // Delete address
         await db.query(
-
-            `DELETE FROM User_Address_Aerodeck
-             WHERE address_id = ?
-             AND user_id = ?`,
-
+            `DELETE FROM user_address_heepit WHERE address_id = ? AND user_id = ?`,
             [address_id, user_id]
-
         );
 
-        // If deleted address was primary,
-        // make another address primary
         if (wasPrimary) {
-
             const [remaining] = await db.query(
-
-                `SELECT address_id
-                 FROM User_Address_Aerodeck
-                 WHERE user_id = ?
-                 ORDER BY address_id ASC
-                 LIMIT 1`,
-
+                `SELECT address_id FROM user_address_heepit
+                 WHERE user_id = ? ORDER BY address_id ASC LIMIT 1`,
                 [user_id]
-
             );
 
             if (remaining.length > 0) {
-
                 await db.query(
-
-                    `UPDATE User_Address_Aerodeck
-                     SET is_primary = 1
-                     WHERE address_id = ?`,
-
+                    `UPDATE user_address_heepit SET is_primary = 1 WHERE address_id = ?`,
                     [remaining[0].address_id]
-
                 );
-
             }
-
         }
 
-        res.json({
-            success: true,
-            message: "Address deleted successfully."
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+        return res.json({ success: true, message: "Address deleted successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const setPrimaryAddress = async (req, res) => {
-
     try {
-
         const { address_id } = req.params;
-        const { session_token } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
+        const user_id = await authenticate(req.body.session_token);
+        if (!user_id) return unauthorized(res);
 
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
-
-        // Sab addresses ko non-primary banao
         await db.query(
-
-            `UPDATE User_Address_Aerodeck
-             SET is_primary = 0
-             WHERE user_id = ?`,
-
+            `UPDATE user_address_heepit SET is_primary = 0 WHERE user_id = ?`,
             [user_id]
-
         );
 
-        // Selected address ko primary banao
         await db.query(
-
-            `UPDATE User_Address_Aerodeck
-             SET is_primary = 1
-             WHERE address_id = ?
-             AND user_id = ?`,
-
+            `UPDATE user_address_heepit SET is_primary = 1 WHERE address_id = ? AND user_id = ?`,
             [address_id, user_id]
-
         );
 
-        res.json({
-            success: true,
-            message: "Primary address updated successfully."
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+        return res.json({ success: true, message: "Primary address updated successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const getPincodeDetails = async (req, res) => {
-
     try {
-
         const { pincode } = req.params;
 
-        if (!/^\d{6}$/.test(pincode)) {
+        if (!/^\d{6}$/.test(pincode))
+            return res.status(400).json({ success: false, message: "Invalid PIN Code." });
 
-            return res.status(400).json({
-                success: false,
-                message: "Invalid PIN Code."
-            });
-
-        }
-
-        const response = await fetch(
-            `https://api.postalpincode.in/pincode/${pincode}`
-        );
-
+        const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
         const data = await response.json();
 
-        if (
-            !data ||
-            data[0].Status !== "Success" ||
-            !data[0].PostOffice
-        ) {
-
-            return res.json({
-                success: false,
-                message: "PIN Code not found."
-            });
-
-        }
+        if (!data || data[0].Status !== "Success" || !data[0].PostOffice)
+            return res.json({ success: false, message: "PIN Code not found." });
 
         const firstOffice = data[0].PostOffice[0];
-        const district = firstOffice.District
-            ?.toLowerCase()
-            .trim();
+        const district = firstOffice.District?.toLowerCase().trim();
 
-        if (
-            district !== "balasore" &&
-            district !== "baleshwar" &&
-            district !== "baleswar"
-        ) {
-
+        if (!SERVICEABLE_DISTRICTS.includes(district)) {
             return res.json({
                 success: false,
                 delivery_available: false,
                 district_received: firstOffice.District,
                 pincode_received: pincode,
-                message: "Delivery only available inside Balasore."
+                message: "Delivery only available inside Balasore.",
             });
-
         }
+
         return res.json({
             success: true,
             location: {
@@ -492,60 +240,31 @@ const getPincodeDetails = async (req, res) => {
                 state: firstOffice.State,
                 country: firstOffice.Country,
             },
-            areas: data[0].PostOffice.map(item => item.Name)
-
+            areas: data[0].PostOffice.map((item) => item.Name),
         });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-            success: false,
-            message: "Server Error"
-        });
-
+    } catch (err) {
+        return serverError(res, err);
     }
-
 };
 
 const getPrimaryAddressByUserId = async (req, res) => {
     try {
         const { user_id } = req.params;
 
-        if (!user_id) {
-            return res.status(400).json({
-                success: false,
-                message: "user_id required."
-            });
-        }
+        if (!user_id)
+            return res.status(400).json({ success: false, message: "user_id required." });
 
         const [rows] = await db.query(
-            `SELECT *
-             FROM User_Address_Aerodeck
-             WHERE user_id = ? AND is_primary = 1
-             LIMIT 1`,
+            `SELECT * FROM user_address_heepit WHERE user_id = ? AND is_primary = 1 LIMIT 1`,
             [user_id]
         );
 
-        if (rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Primary address not found."
-            });
-        }
+        if (rows.length === 0)
+            return res.status(404).json({ success: false, message: "Primary address not found." });
 
-        return res.json({
-            success: true,
-            data: rows[0]
-        });
-
+        return res.json({ success: true, data: rows[0] });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
+        return serverError(res, err);
     }
 };
 
@@ -556,6 +275,5 @@ module.exports = {
     deleteAddress,
     setPrimaryAddress,
     getPincodeDetails,
-    getPrimaryAddressByUserId    
+    getPrimaryAddressByUserId,
 };
-

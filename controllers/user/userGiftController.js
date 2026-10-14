@@ -21,7 +21,7 @@ exports.getGifts = async (req, res) => {
                 gift_total_saves,
                 gift_rating,
                 gift_status
-            FROM Gifts_Aerodeck
+            FROM food_heepit
             ORDER BY gift_id DESC
         `);
 

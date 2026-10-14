@@ -22,7 +22,7 @@ exports.getProducts = async (req, res) => {
     product_total_saves,
     product_rating,
     product_status
-FROM Products_Aerodeck
+FROM cards_heepit
 ORDER BY product_id DESC
         `);
 
@@ -52,7 +52,7 @@ exports.getRelatedProducts = async (req, res) => {
         const [rows] = await pool.query(
             `
             SELECT *
-            FROM Products_Aerodeck
+            FROM cards_heepit
             WHERE product_category = ?
               AND product_id != ?
               AND product_status = 1

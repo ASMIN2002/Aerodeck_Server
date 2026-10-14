@@ -1,9 +1,5 @@
 const pool = require("../../config/db");
 
-// ==============================
-// GET PREMIUM
-// ==============================
-
 exports.getPremium = async (req, res) => {
 
     try {
@@ -11,7 +7,7 @@ exports.getPremium = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT *
-             FROM Premium_Aerodeck
+             FROM medical_heepit
              ORDER BY premium_id DESC`
 
         );

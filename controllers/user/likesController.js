@@ -1,483 +1,112 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
-// ==============================
-// GET USER LIKES
-// ==============================
+const PRODUCT_CONFIG = {
+    G: { table: "food_heepit", idCol: "gift_id", likesCol: "gift_total_likes" },
+    S: { table: "shop_heepit", idCol: "shop_id", likesCol: "shop_total_likes" },
+    P: { table: "medical_heepit", idCol: "premium_id", likesCol: "premium_total_likes" },
+    DEFAULT: { table: "cards_heepit", idCol: "product_id", likesCol: "product_total_likes" },
+};
+
+function getProductConfig(productId) {
+    const prefix = String(productId).charAt(0);
+    return PRODUCT_CONFIG[prefix] || PRODUCT_CONFIG.DEFAULT;
+}
+
+async function authenticate(session_token) {
+    if (!session_token) return null;
+    return await getUserIdFromSession(session_token);
+}
+
+function serverError(res, err, context = "Server error.") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
+
+async function updateLikesCount(productId, delta) {
+    const { table, idCol, likesCol } = getProductConfig(productId);
+
+    const query =
+        delta > 0
+            ? `UPDATE ${table} SET ${likesCol} = ${likesCol} + 1 WHERE ${idCol} = ?`
+            : `UPDATE ${table} SET ${likesCol} = GREATEST(${likesCol} - 1, 0) WHERE ${idCol} = ?`;
+
+    await pool.query(query, [productId]);
+
+    const [rows] = await pool.query(
+        `SELECT ${likesCol} AS total FROM ${table} WHERE ${idCol} = ?`,
+        [productId]
+    );
+
+    return rows[0]?.total || 0;
+}
 
 exports.getLikes = async (req, res) => {
-
     try {
+        const user_id = await authenticate(req.query.session_token);
 
-        const { session_token } = req.query;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const [rows] = await pool.query(
-
-            `SELECT *
-             FROM Product_Likes_AERODECK
-             WHERE user_id = ?`,
-
+            `SELECT * FROM likes_heepit WHERE user_id = ?`,
             [user_id]
-
         );
 
-        res.json({
-
-            success: true,
-
-            message: "Likes fetched successfully.",
-
-            data: rows
-
-        });
-
+        return res.json({ success: true, message: "Likes fetched successfully.", data: rows });
+    } catch (err) {
+        return serverError(res, err, "Fetch likes failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
-
-// ==============================
-// LIKE
-// ==============================
 
 exports.likeProduct = async (req, res) => {
-
     try {
+        const { session_token, product_id } = req.body;
 
-        const {
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-            session_token,
-            product_id
-
-        } = req.body;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
         const [exists] = await pool.query(
-
-            `SELECT *
-             FROM Product_Likes_AERODECK
-             WHERE user_id = ?
-             AND product_id = ?`,
-
-            [
-
-                user_id,
-                product_id
-
-            ]
-
+            `SELECT like_id FROM likes_heepit WHERE user_id = ? AND product_id = ?`,
+            [user_id, product_id]
         );
 
-        if (exists.length > 0) {
-
-            return res.json({
-
-                success: false,
-                message: "Already liked."
-
-            });
-
-        }
+        if (exists.length > 0)
+            return res.json({ success: false, message: "Already liked." });
 
         await pool.query(
-
-            `INSERT INTO Product_Likes_AERODECK
-            (user_id, product_id)
-            VALUES (?, ?)`,
-
-            [
-
-                user_id,
-                product_id
-
-            ]
-
+            `INSERT INTO likes_heepit (user_id, product_id) VALUES (?, ?)`,
+            [user_id, product_id]
         );
 
-        // ==========================
-        // GIFT
-        // ==========================
+        const totalLikes = await updateLikesCount(product_id, 1);
 
-        if (String(product_id).startsWith("G")) {
-
-            await pool.query(
-
-                `UPDATE Gifts_Aerodeck
-                 SET gift_total_likes = gift_total_likes + 1
-                 WHERE gift_id = ?`,
-
-                [
-
-                    product_id
-
-                ]
-
-            );
-
-        }
-        else if (String(product_id).startsWith("S")) {
-
-            await pool.query(
-
-                `UPDATE Shop_Aerodeck
-         SET shop_total_likes = shop_total_likes + 1
-         WHERE shop_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-        else if (String(product_id).startsWith("P")) {
-
-            await pool.query(
-
-                `UPDATE Premium_Aerodeck
-         SET premium_total_likes = premium_total_likes + 1
-         WHERE premium_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-
-        // ==========================
-        // CARD
-        // ==========================
-
-        else {
-
-            await pool.query(
-
-                `UPDATE Products_Aerodeck
-                 SET product_total_likes = product_total_likes + 1
-                 WHERE product_id = ?`,
-
-                [
-
-                    product_id
-
-                ]
-
-            );
-
-        }
-        let totalLikes = 0;
-
-        // GIFT
-        if (String(product_id).startsWith("G")) {
-
-            const [rows] = await pool.query(
-                `SELECT gift_total_likes
-         FROM Gifts_Aerodeck
-         WHERE gift_id = ?`,
-                [product_id]
-            );
-
-            totalLikes = rows[0]?.gift_total_likes || 0;
-        }
-
-        // SHOP
-        else if (String(product_id).startsWith("S")) {
-
-            const [rows] = await pool.query(
-                `SELECT shop_total_likes
-         FROM Shop_Aerodeck
-         WHERE shop_id = ?`,
-                [product_id]
-            );
-
-            totalLikes = rows[0]?.shop_total_likes || 0;
-        }
-
-        // PREMIUM
-        else if (String(product_id).startsWith("P")) {
-
-            const [rows] = await pool.query(
-                `SELECT premium_total_likes
-         FROM Premium_Aerodeck
-         WHERE premium_id = ?`,
-                [product_id]
-            );
-
-            totalLikes = rows[0]?.premium_total_likes || 0;
-        }
-
-        // CARD
-        else {
-
-            const [rows] = await pool.query(
-                `SELECT product_total_likes
-         FROM Products_Aerodeck
-         WHERE product_id = ?`,
-                [product_id]
-            );
-
-            totalLikes = rows[0]?.product_total_likes || 0;
-        }
-
-        res.json({
-
-            success: true,
-
-            message: "Liked successfully.",
-
-            totalLikes
-
-        });
-
+        return res.json({ success: true, message: "Liked successfully.", totalLikes });
+    } catch (err) {
+        return serverError(res, err, "Like failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
 
-// ==============================
-// UNLIKE
-// ==============================
-
 exports.unlikeProduct = async (req, res) => {
-
     try {
-
         const { session_token } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const { productId } = req.params;
 
         await pool.query(
-
-            `DELETE
-             FROM Product_Likes_AERODECK
-             WHERE user_id = ?
-             AND product_id = ?`,
-
-            [
-
-                user_id,
-                productId
-
-            ]
-
+            `DELETE FROM likes_heepit WHERE user_id = ? AND product_id = ?`,
+            [user_id, productId]
         );
 
-        // ==========================
-        // GIFT
-        // ==========================
+        const totalLikes = await updateLikesCount(productId, -1);
 
-        if (String(productId).startsWith("G")) {
-
-            await pool.query(
-
-                `UPDATE Gifts_Aerodeck
-                 SET gift_total_likes =
-                 GREATEST(gift_total_likes - 1, 0)
-                 WHERE gift_id = ?`,
-
-                [
-
-                    productId
-
-                ]
-
-            );
-
-        }
-        else if (String(productId).startsWith("S")) {
-
-            await pool.query(
-
-                `UPDATE Shop_Aerodeck
-         SET shop_total_likes =
-         GREATEST(shop_total_likes - 1, 0)
-         WHERE shop_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-        else if (String(productId).startsWith("P")) {
-
-            await pool.query(
-
-                `UPDATE Premium_Aerodeck
-         SET premium_total_likes =
-         GREATEST(premium_total_likes - 1, 0)
-         WHERE premium_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-
-        // ==========================
-        // CARD
-        // ==========================
-
-        else {
-
-            await pool.query(
-
-                `UPDATE Products_Aerodeck
-                 SET product_total_likes =
-                 GREATEST(product_total_likes - 1, 0)
-                 WHERE product_id = ?`,
-
-                [
-
-                    productId
-
-                ]
-
-            );
-
-        }
-
-        let totalLikes = 0;
-
-        // GIFT
-        if (String(productId).startsWith("G")) {
-
-            const [rows] = await pool.query(
-                `SELECT gift_total_likes
-         FROM Gifts_Aerodeck
-         WHERE gift_id = ?`,
-                [productId]
-            );
-
-            totalLikes = rows[0]?.gift_total_likes || 0;
-        }
-
-        // SHOP
-        else if (String(productId).startsWith("S")) {
-
-            const [rows] = await pool.query(
-                `SELECT shop_total_likes
-         FROM Shop_Aerodeck
-         WHERE shop_id = ?`,
-                [productId]
-            );
-
-            totalLikes = rows[0]?.shop_total_likes || 0;
-        }
-
-        // PREMIUM
-        else if (String(productId).startsWith("P")) {
-
-            const [rows] = await pool.query(
-                `SELECT premium_total_likes
-         FROM Premium_Aerodeck
-         WHERE premium_id = ?`,
-                [productId]
-            );
-
-            totalLikes = rows[0]?.premium_total_likes || 0;
-        }
-
-        // CARD
-        else {
-
-            const [rows] = await pool.query(
-                `SELECT product_total_likes
-         FROM Products_Aerodeck
-         WHERE product_id = ?`,
-                [productId]
-            );
-
-            totalLikes = rows[0]?.product_total_likes || 0;
-        }
-
-        res.json({
-
-            success: true,
-
-            message: "Unlike successfully.",
-
-            totalLikes
-
-        });
-
+        return res.json({ success: true, message: "Unlike successfully.", totalLikes });
+    } catch (err) {
+        return serverError(res, err, "Unlike failed.");
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };

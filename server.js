@@ -63,20 +63,15 @@ const io = new Server(httpServer, {
 app.set("io", io);
 
 io.on("connection", (socket) => {
-    console.log("SMS device connected:", socket.id);
-
     socket.on("register_sms_device", async (data) => {
         try {
             const { device_id, device_token } = data;
-
-            console.log("register_sms_device called:", device_id);  // ✅
-
             const [rows] = await pool.query(
                 `SELECT
                     device_id,
                     is_primary,
                     is_active
-                 FROM SMS_Device_Aerodeck
+                 FROM sms_device_heepit
                  WHERE device_id = ?
                  AND device_token = ?
                  LIMIT 1`,
@@ -101,7 +96,6 @@ io.on("connection", (socket) => {
 
             if (rows[0].is_primary === 1) {
                 socket.join("sms_primary");
-                console.log("Socket joined sms_primary:", socket.id, "device:", device_id);  // ✅
             }
 
             socket.emit("sms_device_verified", {
@@ -125,10 +119,6 @@ io.on("connection", (socket) => {
             message: "HEEPIT TEST OTP 123456"  // ✅ AERODECK → HEEPIT
         });
     });
-
-    socket.on("disconnect", () => {
-        console.log("SMS device disconnected:", socket.id);
-    });
 });
 app.use(helmet());
 const allowedOrigins = [
@@ -147,9 +137,6 @@ app.use(cors({
         if (!origin || allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
-
-        console.log("CORS blocked:", origin);
-
         return callback(new Error("Not allowed by CORS"));
     },
     credentials: true
@@ -277,7 +264,7 @@ app.get("/user/app-version/:userId", async (req, res) => {
 
         const [rows] = await pool.query(
             `SELECT update_version
-             FROM DownloadApp
+             FROM download_app_users
              WHERE user_id = ?
              LIMIT 1`,
             [userId]
@@ -309,7 +296,7 @@ app.get("/user/check-update/:userId", async (req, res) => {
         // User ki currently installed version
         const [userRows] = await pool.query(
             `SELECT update_version
-             FROM DownloadApp
+             FROM download_app_users
              WHERE user_id = ?
              LIMIT 1`,
             [userId]
@@ -322,10 +309,10 @@ app.get("/user/check-update/:userId", async (req, res) => {
             });
         }
 
-        // aerodeck_versions ki latest/top version
+        // heepit_versions ki latest/top version
         const [latestRows] = await pool.query(
             `SELECT version
-             FROM aerodeck_versions
+             FROM heepit_versions
              ORDER BY id DESC
              LIMIT 1`
         );
@@ -379,7 +366,7 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
         }
 
         const [result] = await pool.query(
-            `UPDATE DownloadApp
+            `UPDATE download_app_users
              SET update_version = ?
              WHERE user_id = ?`,
             [
@@ -393,7 +380,7 @@ app.put("/user/update-app-version/:userId", async (req, res) => {
 
             return res.status(404).json({
                 success: false,
-                message: "User not found in DownloadApp"
+                message: "User not found in download_app_users"
             });
 
         }
@@ -425,7 +412,7 @@ app.get("/api/app/latest-version", async (req, res) => {
 
         const [rows] = await pool.query(
             `SELECT version
-             FROM aerodeck_versions
+             FROM heepit_versions
              ORDER BY id DESC
              LIMIT 1`
         );
@@ -534,19 +521,11 @@ app.put("/api/founder/profile-image", async (req, res) => {
     }
 
     catch (err) {
-
-        console.log(err);
-
         res.status(500).json({
-
             success: false,
-
             message: err.message
-
         });
-
     }
-
 });
 
 
@@ -557,7 +536,7 @@ app.get("/api/offers/count", async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT COUNT(*) AS totalOffers
-             FROM Products_Offer_Aerodeck`
+             FROM offers_heepit`
 
         );
 
@@ -585,9 +564,7 @@ app.get("/api/offers/count", async (req, res) => {
 
 });
 httpServer.listen(process.env.PORT, () => {
-
     console.log(
         `Server running on port ${process.env.PORT}`
     );
-
 });

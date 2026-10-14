@@ -4,7 +4,7 @@ async function getUserIdFromSession(sessionToken) {
 
     const [rows] = await pool.query(
         `SELECT user_id
-         FROM User_Session_Aerodeck
+         FROM user_session_heepit
          WHERE session_token = ?
          AND is_active = 1
          LIMIT 1`,

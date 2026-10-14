@@ -11,7 +11,7 @@ exports.getShops = async (req, res) => {
         const [rows] = await pool.query(
 
             `SELECT *
-             FROM Shop_Aerodeck
+             FROM shop_heepit
              ORDER BY shop_id DESC`
 
         );

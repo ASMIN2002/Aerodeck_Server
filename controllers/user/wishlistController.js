@@ -1,498 +1,151 @@
 const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
-// ==============================
-// GET USER WISHLIST
-// ==============================
+const PRODUCT_TABLES = {
+    G: { table: "food_heepit", idCol: "gift_id", savesCol: "gift_total_saves", type: "gift" },
+    S: { table: "shop_heepit", idCol: "shop_id", savesCol: "shop_total_saves", type: "shop" },
+    P: { table: "medical_heepit", idCol: "premium_id", savesCol: "premium_total_saves", type: "premium" },
+    DEFAULT: { table: "cards_heepit", idCol: "product_id", savesCol: "product_total_saves", type: "card" },
+};
+
+function getProductTable(productId) {
+    const prefix = String(productId).charAt(0);
+    return PRODUCT_TABLES[prefix] || PRODUCT_TABLES.DEFAULT;
+}
+
+async function authenticate(session_token) {
+    if (!session_token) return null;
+    return await getUserIdFromSession(session_token);
+}
+
+function unauthorized(res) {
+    return res.status(401).json({ success: false, message: "Invalid or expired session." });
+}
+
+function serverError(res, err, context = "Server Error") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
+
+async function updateSavesCount(productId, delta) {
+    const { table, idCol, savesCol } = getProductTable(productId);
+
+    const query =
+        delta > 0
+            ? `UPDATE ${table} SET ${savesCol} = ${savesCol} + 1 WHERE ${idCol} = ?`
+            : `UPDATE ${table} SET ${savesCol} = GREATEST(${savesCol} - 1, 0) WHERE ${idCol} = ?`;
+
+    await pool.query(query, [productId]);
+}
 
 exports.getWishlist = async (req, res) => {
-
     try {
-
-        const { session_token } = req.query;
-
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(req.query.session_token);
+        if (!user_id) return unauthorized(res);
 
         const [wishlistRows] = await pool.query(
-
-            `SELECT *
-             FROM User_Wishlist_Aerodeck
-             WHERE user_id = ?`,
-
+            `SELECT * FROM user_wishlist_heepit WHERE user_id = ?`,
             [user_id]
-
         );
 
-        const productIds = [];
+        if (!wishlistRows.length) {
+            return res.json({ success: true, message: "Wishlist fetched successfully.", data: [] });
+        }
+
         const giftIds = [];
         const premiumIds = [];
         const shopIds = [];
+        const cardIds = [];
 
         for (const row of wishlistRows) {
-
             const id = String(row.product_id);
-
-            if (id.startsWith("G")) {
-
-                giftIds.push(id);
-
-            }
-
-            else if (id.startsWith("P")) {
-
-                premiumIds.push(id);
-
-            }
-
-            else if (id.startsWith("S")) {
-
-                shopIds.push(id);
-
-            }
-
-            else {
-
-                productIds.push(Number(id));
-
-            }
-
+            if (id.startsWith("G")) giftIds.push(id);
+            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("S")) shopIds.push(id);
+            else cardIds.push(Number(id));
         }
 
-        let products = [];
-        let gifts = [];
-        let premium = [];
-        let shops = [];
+        const [[gifts], [premiums], [shops], [cards]] = await Promise.all([
+            giftIds.length
+                ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
+                : Promise.resolve([[]]),
+            premiumIds.length
+                ? pool.query(`SELECT * FROM medical_heepit WHERE premium_id IN (?)`, [premiumIds])
+                : Promise.resolve([[]]),
+            shopIds.length
+                ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
+                : Promise.resolve([[]]),
+            cardIds.length
+                ? pool.query(`SELECT * FROM cards_heepit WHERE product_id IN (?)`, [cardIds])
+                : Promise.resolve([[]]),
+        ]);
 
-        if (productIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-                 FROM Products_Aerodeck
-                 WHERE product_id IN (?)`,
-
-                [productIds]
-
-            );
-
-            products = rows;
-
+        const timeMap = {};
+        for (const row of wishlistRows) {
+            timeMap[row.product_id] = row.created_at;
         }
 
-        if (giftIds.length > 0) {
+        const wishlist = [
+            ...cards.map((item) => ({ ...item, type: "card", created_at: timeMap[item.product_id] })),
+            ...gifts.map((item) => ({ ...item, type: "gift", created_at: timeMap[item.gift_id] })),
+            ...premiums.map((item) => ({ ...item, type: "premium", created_at: timeMap[item.premium_id] })),
+            ...shops.map((item) => ({ ...item, type: "shop", created_at: timeMap[item.shop_id] })),
+        ];
 
-            const [rows] = await pool.query(
+        wishlist.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-                `SELECT *
-                 FROM Gifts_Aerodeck
-                 WHERE gift_id IN (?)`,
-
-                [giftIds]
-
-            );
-
-            gifts = rows;
-
-        }
-
-        if (premiumIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-                 FROM Premium_Aerodeck
-                 WHERE premium_id IN (?)`,
-
-                [premiumIds]
-
-            );
-
-            premium = rows;
-
-        }
-
-        if (shopIds.length > 0) {
-
-            const [rows] = await pool.query(
-
-                `SELECT *
-                 FROM Shop_Aerodeck
-                 WHERE shop_id IN (?)`,
-
-                [shopIds]
-
-            );
-
-            shops = rows;
-
-        }
-
-        const wishlistMap = {};
-
-        wishlistRows.forEach(row => {
-            wishlistMap[row.product_id] = row.created_at;
-        });
-
-        const wishlist = [];
-
-        // Products
-        products.forEach(item => {
-
-            wishlist.push({
-
-                ...item,
-
-                type: "card",
-
-                created_at: wishlistMap[item.product_id]
-
-            });
-
-        });
-
-        // Gifts
-        gifts.forEach(item => {
-
-            wishlist.push({
-
-                ...item,
-
-                type: "gift",
-
-                created_at: wishlistMap[item.gift_id]
-
-            });
-
-        });
-
-        // Premium
-        premium.forEach(item => {
-
-            wishlist.push({
-                ...item,
-                type: "premium",
-                created_at: wishlistMap[item.premium_id]
-            });
-
-        });
-
-        // Shop
-        shops.forEach(item => {
-
-            wishlist.push({
-
-                ...item,
-
-                type: "shop",
-
-                created_at: wishlistMap[item.shop_id]
-
-            });
-
-        });
-
-        // Newest first
-        wishlist.sort(
-            (a, b) => new Date(b.created_at) - new Date(a.created_at)
-        );
-
-        res.json({
-
-            success: true,
-
-            message: "Wishlist fetched successfully.",
-
-            data: wishlist
-
-        });
-
+        return res.json({ success: true, message: "Wishlist fetched successfully.", data: wishlist });
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
-
-// ==============================
-// SAVE PRODUCT
-// ==============================
 
 exports.saveProduct = async (req, res) => {
-
     try {
-
         const { session_token, product_id } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(session_token);
+        if (!user_id) return unauthorized(res);
 
         const [exists] = await pool.query(
-
-            `SELECT *
-             FROM User_Wishlist_Aerodeck
-             WHERE user_id = ?
-             AND product_id = ?`,
-
+            `SELECT wishlist_id FROM user_wishlist_heepit WHERE user_id = ? AND product_id = ?`,
             [user_id, product_id]
-
         );
 
-        if (exists.length > 0) {
-
-            return res.json({
-
-                success: false,
-
-                message: "Product already saved."
-
-            });
-
-        }
+        if (exists.length > 0)
+            return res.json({ success: false, message: "Product already saved." });
 
         await pool.query(
-
-            `INSERT INTO User_Wishlist_Aerodeck
-            (user_id, product_id)
-            VALUES (?, ?)`,
-
+            `INSERT INTO user_wishlist_heepit (user_id, product_id) VALUES (?, ?)`,
             [user_id, product_id]
-
         );
-        if (String(product_id).startsWith("G")) {
 
-            await pool.query(
+        await updateSavesCount(product_id, 1);
 
-                `UPDATE Gifts_Aerodeck
-         SET gift_total_saves = gift_total_saves + 1
-         WHERE gift_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-
-        else if (String(product_id).startsWith("S")) {
-
-            await pool.query(
-
-                `UPDATE Shop_Aerodeck
-         SET shop_total_saves = shop_total_saves + 1
-         WHERE shop_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-        else if (String(product_id).startsWith("P")) {
-
-            await pool.query(
-
-                `UPDATE Premium_Aerodeck
-         SET premium_total_saves = premium_total_saves + 1
-         WHERE premium_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-
-        else {
-
-            await pool.query(
-
-                `UPDATE Products_Aerodeck
-         SET product_total_saves = product_total_saves + 1
-         WHERE product_id = ?`,
-
-                [product_id]
-
-            );
-
-        }
-
-
-        res.json({
-
-            success: true,
-
-            message: "Product saved successfully."
-
-        });
-
+        return res.json({ success: true, message: "Product saved successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };
 
-// ==============================
-// REMOVE PRODUCT
-// ==============================
-
 exports.removeProduct = async (req, res) => {
-
     try {
-
         const { session_token } = req.body;
 
-        const user_id = await getUserIdFromSession(session_token);
-
-        if (!user_id) {
-
-            return res.status(401).json({
-
-                success: false,
-
-                message: "Invalid or expired session."
-
-            });
-
-        }
+        const user_id = await authenticate(session_token);
+        if (!user_id) return unauthorized(res);
 
         const { productId } = req.params;
 
         await pool.query(
-
-            `DELETE FROM User_Wishlist_Aerodeck
-             WHERE user_id = ?
-             AND product_id = ?`,
-
+            `DELETE FROM user_wishlist_heepit WHERE user_id = ? AND product_id = ?`,
             [user_id, productId]
-
         );
 
-        if (String(productId).startsWith("G")) {
+        await updateSavesCount(productId, -1);
 
-            await pool.query(
-
-                `UPDATE Gifts_Aerodeck
-         SET gift_total_saves =
-         GREATEST(gift_total_saves - 1, 0)
-         WHERE gift_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-
-
-        else if (String(productId).startsWith("S")) {
-
-            await pool.query(
-
-                `UPDATE Shop_Aerodeck
-         SET shop_total_saves =
-         GREATEST(shop_total_saves - 1, 0)
-         WHERE shop_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-
-        else if (String(productId).startsWith("P")) {
-
-            await pool.query(
-
-                `UPDATE Premium_Aerodeck
-         SET premium_total_saves =
-         GREATEST(premium_total_saves - 1, 0)
-         WHERE premium_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-
-        else {
-
-            await pool.query(
-
-                `UPDATE Products_Aerodeck
-         SET product_total_saves =
-         GREATEST(product_total_saves - 1, 0)
-         WHERE product_id = ?`,
-
-                [productId]
-
-            );
-
-        }
-
-        res.json({
-
-            success: true,
-
-            message: "Product removed successfully."
-
-        });
-
+        return res.json({ success: true, message: "Product removed successfully." });
+    } catch (err) {
+        return serverError(res, err);
     }
-
-    catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: err.message
-
-        });
-
-    }
-
 };

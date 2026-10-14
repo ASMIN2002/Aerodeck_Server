@@ -1,60 +1,54 @@
 const db = require("../config/db");
 const cloudinary = require("../config/cloudinary");
 
-/* ============================================
-   ADD CATEGORY
-   ============================================ */
-const addCategory = async (req, res) => {
+const ALLOWED_TYPES = ["SHOP", "GIFT", "FOOD", "CARDS", "MEDICAL"];
+const CLOUDINARY_FOLDER = "aerodeck/categories";
 
-    try {
+function serverError(res, err, context = "Server Error") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
 
-        const { catname, category } = req.body;
+function validateCategoryInput(catname, category) {
+    if (!catname || !category?.trim())
+        return { error: "Type and Category are required" };
 
-        if (!catname || !category?.trim()) {
-            return res.status(400).json({
-                success: false,
-                message: "Type and Category are required"
-            });
-        }
+    if (!ALLOWED_TYPES.includes(catname))
+        return { error: "Invalid category type" };
 
-        const allowedTypes = ["SHOP", "GIFT", "FOOD", "CARDS", "MEDICAL"];
+    return { valid: true };
+}
 
-        if (!allowedTypes.includes(catname)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid category type"
-            });
-        }
-
-        if (!req.file) {
-            return res.status(400).json({
-                success: false,
-                message: "Image is required"
-            });
-        }
-
-        const uploadResult = await new Promise(
-            (resolve, reject) => {
-                const stream = cloudinary.uploader.upload_stream(
-                    {
-                        folder: "aerodeck/categories",
-                        resource_type: "image"
-                    },
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
-                );
-                stream.end(req.file.buffer);
+async function uploadToCloudinary(fileBuffer) {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            { folder: CLOUDINARY_FOLDER, resource_type: "image" },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
             }
         );
+        stream.end(fileBuffer);
+    });
+}
 
+const addCategory = async (req, res) => {
+    try {
+        const { catname, category } = req.body;
+
+        const validation = validateCategoryInput(catname, category);
+        if (validation.error)
+            return res.status(400).json({ success: false, message: validation.error });
+
+        if (!req.file)
+            return res.status(400).json({ success: false, message: "Image is required" });
+
+        const uploadResult = await uploadToCloudinary(req.file.buffer);
         const imageUrl = uploadResult.secure_url;
         const imageId = uploadResult.public_id;
 
         const [result] = await db.query(
-            `INSERT INTO ALL_Category
-             (catname, category, image, imageid)
+            `INSERT INTO all_category (catname, category, image, imageid)
              VALUES (?, ?, ?, ?)`,
             [catname, category.trim(), imageUrl, imageId]
         );
@@ -67,195 +61,99 @@ const addCategory = async (req, res) => {
                 catname,
                 category: category.trim(),
                 image: imageUrl,
-                imageid: imageId
-            }
+                imageid: imageId,
+            },
         });
-
     } catch (err) {
-
-        console.error("ADD CATEGORY ERROR:", err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
+        return serverError(res, err, "ADD CATEGORY ERROR:");
     }
-
 };
 
-/* ============================================
-   GET CATEGORIES
-   ============================================ */
 const getCategories = async (req, res) => {
-
     try {
-
         const [rows] = await db.query(
             `SELECT catid, catname, category, image, imageid
-             FROM ALL_Category
+             FROM all_category
              ORDER BY catid DESC`
         );
 
-        return res.json({
-            success: true,
-            data: rows
-        });
-
+        return res.json({ success: true, data: rows });
     } catch (err) {
-
-        console.error("GET CATEGORY ERROR:", err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
+        return serverError(res, err, "GET CATEGORY ERROR:");
     }
-
 };
 
-/* ============================================
-   UPDATE CATEGORY — catname + category
-   ============================================ */
 const updateCategory = async (req, res) => {
-
     try {
-
         const { catid } = req.params;
         const { catname, category } = req.body;
 
-        if (!catid) {
-            return res.status(400).json({
-                success: false,
-                message: "Category ID required"
-            });
-        }
+        if (!catid)
+            return res.status(400).json({ success: false, message: "Category ID required" });
 
-        if (!catname || !category?.trim()) {
-            return res.status(400).json({
-                success: false,
-                message: "Type and Category are required"
-            });
-        }
-
-        const allowedTypes = ["SHOP", "GIFT", "FOOD", "CARDS", "MEDICAL"];
-
-        if (!allowedTypes.includes(catname)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid category type"
-            });
-        }
+        const validation = validateCategoryInput(catname, category);
+        if (validation.error)
+            return res.status(400).json({ success: false, message: validation.error });
 
         const [check] = await db.query(
-            `SELECT catid FROM ALL_Category WHERE catid = ? LIMIT 1`,
+            `SELECT catid FROM all_category WHERE catid = ? LIMIT 1`,
             [catid]
         );
 
-        if (check.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Category not found"
-            });
-        }
+        if (check.length === 0)
+            return res.status(404).json({ success: false, message: "Category not found" });
 
         await db.query(
-            `UPDATE ALL_Category
-             SET catname = ?, category = ?
-             WHERE catid = ?`,
+            `UPDATE all_category SET catname = ?, category = ? WHERE catid = ?`,
             [catname, category.trim(), catid]
         );
 
         return res.json({
             success: true,
             message: "Category Updated Successfully",
-            data: {
-                catid: Number(catid),
-                catname,
-                category: category.trim()
-            }
+            data: { catid: Number(catid), catname, category: category.trim() },
         });
-
     } catch (err) {
-
-        console.error("UPDATE CATEGORY ERROR:", err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
+        return serverError(res, err, "UPDATE CATEGORY ERROR:");
     }
-
 };
 
-/* ============================================
-   DELETE CATEGORY — row + cloudinary image
-   ============================================ */
 const deleteCategory = async (req, res) => {
-
     try {
-
         const { catid } = req.params;
 
-        if (!catid) {
-            return res.status(400).json({
-                success: false,
-                message: "Category ID required"
-            });
-        }
+        if (!catid)
+            return res.status(400).json({ success: false, message: "Category ID required" });
 
         const [rows] = await db.query(
-            `SELECT imageid FROM ALL_Category WHERE catid = ? LIMIT 1`,
+            `SELECT imageid FROM all_category WHERE catid = ? LIMIT 1`,
             [catid]
         );
 
-        if (rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Category not found"
-            });
-        }
+        if (rows.length === 0)
+            return res.status(404).json({ success: false, message: "Category not found" });
 
         const imageId = rows[0].imageid;
 
-        /* Cloudinary se image delete */
         if (imageId) {
             try {
                 await cloudinary.uploader.destroy(imageId);
             } catch (cloudErr) {
-                console.error("CLOUDINARY DELETE ERROR:", cloudErr);
-                /* Continue — DB row delete karo */
+                console.error("CLOUDINARY DELETE ERROR:", cloudErr.message);
             }
         }
 
-        await db.query(
-            `DELETE FROM ALL_Category WHERE catid = ?`,
-            [catid]
-        );
+        await db.query(`DELETE FROM all_category WHERE catid = ?`, [catid]);
 
-        return res.json({
-            success: true,
-            message: "Category Deleted Successfully"
-        });
-
+        return res.json({ success: true, message: "Category Deleted Successfully" });
     } catch (err) {
-
-        console.error("DELETE CATEGORY ERROR:", err);
-
-        return res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
+        return serverError(res, err, "DELETE CATEGORY ERROR:");
     }
-
 };
 
 module.exports = {
     addCategory,
     getCategories,
     updateCategory,
-    deleteCategory
+    deleteCategory,
 };
