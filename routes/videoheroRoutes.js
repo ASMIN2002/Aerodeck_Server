@@ -2,29 +2,19 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    getActiveVideos,       // ✅ ADD THIS
-    getAllVideos,
-    createVideo,
-    toggleStatus,
-    deleteVideo
+   getActiveVideos,
+   getAllVideos,
+   createVideo,
+   updateVideo,
+   toggleStatus,
+   deleteVideo,
 } = require("../controllers/videoheroController");
 
-/* ============================================
-   PUBLIC ROUTE (User App)
-   ============================================ */
-
-router.get("/active", getActiveVideos);   // ✅ ADD THIS
-
-/* ============================================
-   FOUNDER ROUTES
-   ============================================ */
-
+router.get("/active", getActiveVideos);
 router.get("/", getAllVideos);
-
 router.post("/", createVideo);
-
 router.put("/status/:id", toggleStatus);
-
+router.put("/:id", updateVideo);
 router.delete("/:id", deleteVideo);
 
 module.exports = router;

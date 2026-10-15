@@ -186,3 +186,97 @@ exports.getReviewMedia = async (req, res) => {
         return serverError(res, err);
     }
 };
+exports.getMyReviews = async (req, res) => {
+    try {
+        const { session_token } = req.query;
+
+        const user_id = await authenticate(session_token);
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid session." });
+
+        const [reviews] = await pool.query(
+            `SELECT
+                r.rating_id,
+                r.order_item_id,
+                r.product_id,
+                r.rating,
+                r.review_message,
+                r.created_at
+             FROM ratings_heepit r
+             WHERE r.user_id = ?
+             ORDER BY r.created_at DESC`,
+            [user_id]
+        );
+
+        if (reviews.length === 0) {
+            return res.json({ success: true, data: [] });
+        }
+
+        const giftIds = [];
+        const shopIds = [];
+        const premiumIds = [];
+        const cardIds = [];
+
+        for (const r of reviews) {
+            const id = String(r.product_id);
+            if (id.startsWith("G")) giftIds.push(id);
+            else if (id.startsWith("S")) shopIds.push(id);
+            else if (id.startsWith("P")) premiumIds.push(id);
+            else cardIds.push(Number(id));
+        }
+
+        const [[gifts], [shops], [premiums], [cards]] = await Promise.all([
+            giftIds.length
+                ? pool.query(
+                    `SELECT gift_id AS id, gift_name AS name, gift_price AS price, gift_image1 AS image FROM food_heepit WHERE gift_id IN (?)`,
+                    [giftIds]
+                )
+                : Promise.resolve([[]]),
+            shopIds.length
+                ? pool.query(
+                    `SELECT shop_id AS id, shop_name AS name, shop_price AS price, shop_image1 AS image FROM shop_heepit WHERE shop_id IN (?)`,
+                    [shopIds]
+                )
+                : Promise.resolve([[]]),
+            premiumIds.length
+                ? pool.query(
+                    `SELECT premium_id AS id, premium_name AS name, premium_price AS price, premium_image1 AS image FROM medical_heepit WHERE premium_id IN (?)`,
+                    [premiumIds]
+                )
+                : Promise.resolve([[]]),
+            cardIds.length
+                ? pool.query(
+                    `SELECT product_id AS id, product_name AS name, product_price AS price, product_image1 AS image FROM cards_heepit WHERE product_id IN (?)`,
+                    [cardIds]
+                )
+                : Promise.resolve([[]]),
+        ]);
+
+        const giftsMap = new Map(gifts.map((g) => [String(g.id), { ...g, type: "gifts" }]));
+        const shopsMap = new Map(shops.map((s) => [String(s.id), { ...s, type: "shop" }]));
+        const premiumsMap = new Map(premiums.map((p) => [String(p.id), { ...p, type: "premium" }]));
+        const cardsMap = new Map(cards.map((c) => [String(c.id), { ...c, type: "products" }]));
+
+        const data = reviews.map((r) => {
+            const id = String(r.product_id);
+
+            let product = null;
+            if (id.startsWith("G")) product = giftsMap.get(id);
+            else if (id.startsWith("S")) product = shopsMap.get(id);
+            else if (id.startsWith("P")) product = premiumsMap.get(id);
+            else product = cardsMap.get(id);
+
+            return {
+                ...r,
+                product_name: product?.name || "Unknown",
+                product_price: product?.price || 0,
+                product_image: product?.image || "",
+                product_type: product?.type || "products",
+            };
+        });
+
+        return res.json({ success: true, data });
+    } catch (err) {
+        return serverError(res, err);
+    }
+};
