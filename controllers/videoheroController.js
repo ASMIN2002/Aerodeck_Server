@@ -171,10 +171,9 @@ exports.deleteVideo = async (req, res) => {
                     rows[0].public_id,
                     { resource_type: "video" }
                 );
-                console.log("CLOUDINARY VIDEO DELETED:", rows[0].public_id);
             } catch (err) {
                 console.error("Cloudinary delete error:", err);
-                /* Continue even if Cloudinary delete fails */
+               
             }
         }
 
