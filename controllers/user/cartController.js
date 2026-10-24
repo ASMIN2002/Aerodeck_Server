@@ -8,7 +8,8 @@ async function authenticate(session_token) {
 
 function getMinQuantity(productId) {
     const id = String(productId);
-    return id.startsWith("G") || id.startsWith("S") ? 1 : 50;
+    if (id.startsWith("G") || id.startsWith("S") || id.startsWith("M")) return 1;
+    return 50;
 }
 
 function serverError(res, err, context = "Server error.") {
