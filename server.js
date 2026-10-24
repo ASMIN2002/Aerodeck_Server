@@ -11,13 +11,13 @@ const founderRoutes = require("./routes/founderRoutes");
 const authRoutes = require("./routes/authRoutes");
 const giftRoutes = require("./routes/giftRoutes");
 const categoryRoutes = require("./routes/CategoryRoutes");
-const premiumRoutes = require("./routes/premiumRoutes");
 const shopRoutes = require("./routes/shopRoutes");
 const founderOrderRoutes = require("./routes/founderOrderRoutes");
 const heepitAppsRoutes = require("./routes/heepitAppsRoutes");
 const detailsRoutes = require("./routes/detailsRoutes");
 const openOfferRoutes = require("./routes/openOfferRoutes");
 const videoheroRoutes = require("./routes/videoheroRoutes");
+const doctorRoutes = require("./routes/doctorRoutes");
 
 // SECURITY
 const helmet = require("helmet");
@@ -30,7 +30,6 @@ const cartRoutes = require("./routes/user/cart");
 const likesRoutes = require("./routes/user/likes");
 const userGiftRoutes = require("./routes/user/userGiftRoutes");
 const userShopRoutes = require("./routes/user/userShopRoutes");
-const userPremiumRoutes = require("./routes/user/userPremiumRoutes");
 const userDetailsRoutes = require("./routes/user/UserDetailsRoutes");
 const userAddressRoutes = require("./routes/user/userAddressRoutes");
 const userOrderRoutes = require("./routes/user/userOrderRoutes");
@@ -40,6 +39,7 @@ const userRoutes = require("./routes/user/userRoutes");
 const reviewRoutes = require("./routes/user/reviewRoutes");
 const smsRoutes = require("./routes/smsRoutes");
 const userRewardsRoutes = require("./routes/user/userRewardsRoutes");
+const medicineRoutes = require("./routes/user/medicineRoutes");
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -157,7 +157,6 @@ app.use("/api/founders", founderRoutes);
 app.use("/api", productsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/gifts", giftRoutes);
-app.use("/api/premium", premiumRoutes);
 app.use("/api/category", categoryRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/founder/orders", founderOrderRoutes);
@@ -165,6 +164,8 @@ app.use("/api", heepitAppsRoutes);
 app.use("/api", detailsRoutes);
 app.use("/api/openoffers", openOfferRoutes);
 app.use("/api/videohero", videoheroRoutes);
+app.use("/api/user/doctor", doctorRoutes);
+
 
 // USER
 app.use("/api/user", userProductRoutes);
@@ -173,7 +174,6 @@ app.use("/api/user", cartRoutes);
 app.use("/api/user", likesRoutes);
 app.use("/api/user", userGiftRoutes);
 app.use("/api/user", userShopRoutes);
-app.use("/api/user", userPremiumRoutes);
 app.use("/api/user/details", userDetailsRoutes);
 app.use("/api/user", userAddressRoutes);
 app.use("/api/user/orders", userOrderRoutes);
@@ -183,6 +183,7 @@ app.use("/api/user", userRoutes);
 app.use("/api/user/review", reviewRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/user", userRewardsRoutes);
+app.use("/api/user/medicine", medicineRoutes);
 
 
 // ADMIN ROUTES
@@ -563,6 +564,17 @@ app.get("/api/offers/count", async (req, res) => {
     }
 
 });
+setInterval(async () => {
+    try {
+        await pool.query(
+            `DELETE FROM booked_doctor 
+             WHERE is_booked = 0 
+             AND created_at < NOW() - INTERVAL 5 MINUTE`
+        );
+    } catch (err) {
+        console.error("Auto-delete error:", err.message);
+    }
+}, 60000);
 httpServer.listen(process.env.PORT, () => {
     console.log(
         `Server running on port ${process.env.PORT}`

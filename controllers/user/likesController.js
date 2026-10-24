@@ -4,7 +4,6 @@ const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 const PRODUCT_CONFIG = {
     G: { table: "food_heepit", idCol: "gift_id", likesCol: "gift_total_likes" },
     S: { table: "shop_heepit", idCol: "shop_id", likesCol: "shop_total_likes" },
-    P: { table: "medical_heepit", idCol: "premium_id", likesCol: "premium_total_likes" },
     DEFAULT: { table: "cards_heepit", idCol: "product_id", likesCol: "product_total_likes" },
 };
 
@@ -79,18 +78,17 @@ exports.getMyLikes = async (req, res) => {
 
         const giftIds = [];
         const shopIds = [];
-        const premiumIds = [];
         const cardIds = [];
 
         for (const l of likes) {
             const id = String(l.product_id);
             if (id.startsWith("G")) giftIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
-            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("M")) continue;
             else cardIds.push(Number(id));
         }
 
-        const [[gifts], [shops], [premiums], [cards]] = await Promise.all([
+        const [[gifts], [shops], [cards]] = await Promise.all([
             giftIds.length
                 ? pool.query(
                     `SELECT gift_id AS id, gift_name AS name, gift_image1 AS image, gift_total_likes AS total_likes
@@ -105,13 +103,6 @@ exports.getMyLikes = async (req, res) => {
                     [shopIds]
                 )
                 : Promise.resolve([[]]),
-            premiumIds.length
-                ? pool.query(
-                    `SELECT premium_id AS id, premium_name AS name, premium_image1 AS image, premium_total_likes AS total_likes
-                     FROM medical_heepit WHERE premium_id IN (?)`,
-                    [premiumIds]
-                )
-                : Promise.resolve([[]]),
             cardIds.length
                 ? pool.query(
                     `SELECT product_id AS id, product_name AS name, product_image1 AS image, product_total_likes AS total_likes
@@ -123,27 +114,30 @@ exports.getMyLikes = async (req, res) => {
 
         const giftsMap = new Map(gifts.map((g) => [String(g.id), { ...g, type: "gifts" }]));
         const shopsMap = new Map(shops.map((s) => [String(s.id), { ...s, type: "shop" }]));
-        const premiumsMap = new Map(premiums.map((p) => [String(p.id), { ...p, type: "premium" }]));
         const cardsMap = new Map(cards.map((c) => [String(c.id), { ...c, type: "products" }]));
 
-        const data = likes.map((l) => {
-            const id = String(l.product_id);
+        const data = likes
+            .map((l) => {
+                const id = String(l.product_id);
 
-            let product = null;
-            if (id.startsWith("G")) product = giftsMap.get(id);
-            else if (id.startsWith("S")) product = shopsMap.get(id);
-            else if (id.startsWith("P")) product = premiumsMap.get(id);
-            else product = cardsMap.get(id);
+                let product = null;
+                if (id.startsWith("G")) product = giftsMap.get(id);
+                else if (id.startsWith("S")) product = shopsMap.get(id);
+                else if (id.startsWith("M")) return null;
+                else product = cardsMap.get(id);
 
-            return {
-                like_id: l.like_id,
-                product_id: l.product_id,
-                product_name: product?.name || "Unknown",
-                product_image: product?.image || "",
-                total_likes: product?.total_likes || 0,
-                product_type: product?.type || "products",
-            };
-        });
+                if (!product) return null;
+
+                return {
+                    like_id: l.like_id,
+                    product_id: l.product_id,
+                    product_name: product.name,
+                    product_image: product.image,
+                    total_likes: product.total_likes,
+                    product_type: product.type,
+                };
+            })
+            .filter(Boolean);
 
         return res.json({ success: true, data });
     } catch (err) {

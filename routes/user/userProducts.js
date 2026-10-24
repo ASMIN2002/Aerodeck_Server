@@ -6,14 +6,8 @@ const {
     getRelatedProducts
 } = require("../../controllers/user/userProductsController");
 
-const {
-    getOffers
-} = require("../../controllers/user/offerController");
-
 
 router.get("/products", getProducts);
-
-router.get("/offers", getOffers);
 
 router.get("/products/related", getRelatedProducts);
 

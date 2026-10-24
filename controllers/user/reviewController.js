@@ -4,7 +4,7 @@ const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 const PRODUCT_CONFIG = {
     G: { table: "food_heepit", idCol: "gift_id", ratingCol: "gift_rating" },
     S: { table: "shop_heepit", idCol: "shop_id", ratingCol: "shop_rating" },
-    P: { table: "medical_heepit", idCol: "premium_id", ratingCol: "premium_rating" },
+    M: { table: "medicine_heepit", idCol: "medicine_id", ratingCol: "medicine_rating" },
     DEFAULT: { table: "cards_heepit", idCol: "product_id", ratingCol: "product_rating" },
 };
 
@@ -186,6 +186,7 @@ exports.getReviewMedia = async (req, res) => {
         return serverError(res, err);
     }
 };
+
 exports.getMyReviews = async (req, res) => {
     try {
         const { session_token } = req.query;
@@ -214,18 +215,18 @@ exports.getMyReviews = async (req, res) => {
 
         const giftIds = [];
         const shopIds = [];
-        const premiumIds = [];
+        const medicineIds = [];
         const cardIds = [];
 
         for (const r of reviews) {
             const id = String(r.product_id);
             if (id.startsWith("G")) giftIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
-            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("M")) medicineIds.push(id);
             else cardIds.push(Number(id));
         }
 
-        const [[gifts], [shops], [premiums], [cards]] = await Promise.all([
+        const [[gifts], [shops], [medicines], [cards]] = await Promise.all([
             giftIds.length
                 ? pool.query(
                     `SELECT gift_id AS id, gift_name AS name, gift_price AS price, gift_image1 AS image FROM food_heepit WHERE gift_id IN (?)`,
@@ -238,10 +239,10 @@ exports.getMyReviews = async (req, res) => {
                     [shopIds]
                 )
                 : Promise.resolve([[]]),
-            premiumIds.length
+            medicineIds.length
                 ? pool.query(
-                    `SELECT premium_id AS id, premium_name AS name, premium_price AS price, premium_image1 AS image FROM medical_heepit WHERE premium_id IN (?)`,
-                    [premiumIds]
+                    `SELECT medicine_id AS id, medicine_name AS name, medicine_price AS price, medicine_image1 AS image FROM medicine_heepit WHERE medicine_id IN (?)`,
+                    [medicineIds]
                 )
                 : Promise.resolve([[]]),
             cardIds.length
@@ -254,7 +255,7 @@ exports.getMyReviews = async (req, res) => {
 
         const giftsMap = new Map(gifts.map((g) => [String(g.id), { ...g, type: "gifts" }]));
         const shopsMap = new Map(shops.map((s) => [String(s.id), { ...s, type: "shop" }]));
-        const premiumsMap = new Map(premiums.map((p) => [String(p.id), { ...p, type: "premium" }]));
+        const medicinesMap = new Map(medicines.map((m) => [String(m.id), { ...m, type: "medicine" }]));
         const cardsMap = new Map(cards.map((c) => [String(c.id), { ...c, type: "products" }]));
 
         const data = reviews.map((r) => {
@@ -263,7 +264,7 @@ exports.getMyReviews = async (req, res) => {
             let product = null;
             if (id.startsWith("G")) product = giftsMap.get(id);
             else if (id.startsWith("S")) product = shopsMap.get(id);
-            else if (id.startsWith("P")) product = premiumsMap.get(id);
+            else if (id.startsWith("M")) product = medicinesMap.get(id);
             else product = cardsMap.get(id);
 
             return {

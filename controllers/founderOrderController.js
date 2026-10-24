@@ -7,7 +7,7 @@ const REWARD_THRESHOLD = 250;
 const PRODUCT_TABLES = {
     G: { table: "food_heepit", idCol: "gift_id", imageCol: "gift_image1" },
     S: { table: "shop_heepit", idCol: "shop_id", imageCol: "shop_image1" },
-    P: { table: "medical_heepit", idCol: "premium_id", imageCol: "premium_image1" },
+    M: { table: "medicine_heepit", idCol: "medicine_id", imageCol: "medicine_image1" },
     DEFAULT: { table: "cards_heepit", idCol: "product_id", imageCol: "product_image1" },
 };
 

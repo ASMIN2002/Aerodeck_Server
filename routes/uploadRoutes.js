@@ -1,9 +1,7 @@
 const express = require("express");
-
 const router = express.Router();
 
-const upload =
-    require("../config/multer");
+const upload = require("../config/multer");
 
 const {
     uploadProfile,
@@ -11,96 +9,22 @@ const {
     removeUserProfile,
     uploadProduct,
     uploadGift,
-    uploadPremium,
     uploadShop,
     uploadReviewImage,
     deleteReviewImage,
     uploadVideoHero,
-    uploadShopVideo 
+    uploadShopVideo
 } = require("../controllers/uploadController");
 
-router.post(
-    "/product",
-    upload.single("image"),
-    uploadProduct
-);
-
-router.post(
-    "/gift",
-    upload.single("image"),
-    uploadGift
-);
-
-router.post(
-    "/premium",
-
-    upload.single("image"),
-
-    uploadPremium
-
-);
-
-router.post(
-
-    "/shop",
-
-    upload.single("image"),
-
-    uploadShop
-
-);
-
-router.post(
-
-    "/profile",
-
-    upload.single("image"),
-
-    uploadProfile
-
-);
-
-router.post(
-
-    "/user-profile",
-
-    upload.single("image"),
-
-    uploadUserProfile
-);
-
-router.post(
-
-    "/remove-user-profile",
-
-    removeUserProfile
-);
-
-router.post(
-    "/review",
-    upload.single("image"),
-    uploadReviewImage
-);
-
-router.delete(
-
-    "/review/:media_id",
-
-    deleteReviewImage
-
-);
-
-router.post(
-    "/video",
-    upload.single("video"),
-    uploadVideoHero
-);
-
-
-router.post(
-    "/shop-video",
-    upload.single("video"),
-    uploadShopVideo
-);
+router.post("/product", upload.single("image"), uploadProduct);
+router.post("/gift", upload.single("image"), uploadGift);
+router.post("/shop", upload.single("image"), uploadShop);
+router.post("/profile", upload.single("image"), uploadProfile);
+router.post("/user-profile", upload.single("image"), uploadUserProfile);
+router.post("/remove-user-profile", removeUserProfile);
+router.post("/review", upload.single("image"), uploadReviewImage);
+router.delete("/review/:media_id", deleteReviewImage);
+router.post("/video", upload.single("video"), uploadVideoHero);
+router.post("/shop-video", upload.single("video"), uploadShopVideo);
 
 module.exports = router;

@@ -163,43 +163,6 @@ exports.uploadGift = async (req, res) => {
   }
 };
 
-exports.uploadPremium = async (req, res) => {
-  try {
-    if (!req.file) return badRequest(res, "No Image Selected");
-
-    const { premium_id, image_no } = req.body;
-
-    if (!premium_id || !image_no)
-      return badRequest(res, "Premium ID & Image No Required");
-
-    const [rows] = await db.query(
-      `SELECT premium_image1, premium_image2, premium_image3, premium_image4
-             FROM medical_heepit WHERE premium_id = ?`,
-      [premium_id]
-    );
-
-    if (rows.length > 0) {
-      await deleteOldImage(rows[0][`premium_image${image_no}`]);
-    }
-
-    const result = await uploadToCloudinary(req.file.buffer, {
-      folder: "AERODECK/PREMIUM",
-      public_id: `premium_${premium_id}_image${image_no}`,
-      overwrite: true,
-      invalidate: true,
-      resource_type: "image",
-    });
-
-    return res.json({
-      success: true,
-      url: result.secure_url,
-      public_id: result.public_id,
-    });
-  } catch (err) {
-    return serverError(res, err);
-  }
-};
-
 exports.uploadShop = async (req, res) => {
   try {
     if (!req.file) return badRequest(res, "No Image Selected");

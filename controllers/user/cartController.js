@@ -33,24 +33,24 @@ exports.getCart = async (req, res) => {
         }
 
         const giftIds = [];
-        const premiumIds = [];
+        const medicineIds = [];
         const shopIds = [];
         const cardIds = [];
 
         for (const cart of cartRows) {
             const id = String(cart.product_id);
             if (id.startsWith("G")) giftIds.push(id);
-            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("M")) medicineIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
             else cardIds.push(Number(id));
         }
 
-        const [[gifts], [premiums], [shops], [cards]] = await Promise.all([
+        const [[gifts], [medicines], [shops], [cards]] = await Promise.all([
             giftIds.length
                 ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
                 : Promise.resolve([[]]),
-            premiumIds.length
-                ? pool.query(`SELECT * FROM medical_heepit WHERE premium_id IN (?)`, [premiumIds])
+            medicineIds.length
+                ? pool.query(`SELECT * FROM medicine_heepit WHERE medicine_id IN (?)`, [medicineIds])
                 : Promise.resolve([[]]),
             shopIds.length
                 ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
@@ -67,7 +67,7 @@ exports.getCart = async (req, res) => {
         ]);
 
         const giftsMap = new Map(gifts.map((g) => [String(g.gift_id), g]));
-        const premiumsMap = new Map(premiums.map((p) => [String(p.premium_id), p]));
+        const medicinesMap = new Map(medicines.map((m) => [String(m.medicine_id), m]));
         const shopsMap = new Map(shops.map((s) => [String(s.shop_id), s]));
         const cardsMap = new Map(cards.map((c) => [String(c.product_id), c]));
 
@@ -77,7 +77,7 @@ exports.getCart = async (req, res) => {
                 let item = null;
 
                 if (id.startsWith("G")) item = giftsMap.get(id);
-                else if (id.startsWith("P")) item = premiumsMap.get(id);
+                else if (id.startsWith("M")) item = medicinesMap.get(id);
                 else if (id.startsWith("S")) item = shopsMap.get(id);
                 else item = cardsMap.get(id);
 

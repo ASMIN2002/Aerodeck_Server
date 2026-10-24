@@ -7,7 +7,7 @@ const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "
 const PRODUCT_TABLES = {
     G: { table: "food_heepit", idCol: "gift_id", type: "GIFT" },
     S: { table: "shop_heepit", idCol: "shop_id", type: "SHOP" },
-    P: { table: "medical_heepit", idCol: "premium_id", type: "PREMIUM" },
+    M: { table: "medicine_heepit", idCol: "medicine_id", type: "MEDICINE" },
     DEFAULT: { table: "cards_heepit", idCol: "product_id", type: "CARD" },
 };
 
@@ -136,6 +136,15 @@ function buildProductMeta(item) {
             cancelDays: 3,
         };
     }
+    if (item.product_id.startsWith("M")) {
+        return {
+            productType: "MEDICINE",
+            productName: item.medicine_name,
+            productImage: item.medicine_image1,
+            unitPrice: Number(item.medicine_price),
+            cancelDays: 3,
+        };
+    }
     return {
         productType: "CARD",
         productName: item.card_name,
@@ -207,6 +216,14 @@ exports.placeOrder = async (req, res) => {
                         );
                     }
                 }
+            }
+
+            if (meta.productType === "MEDICINE") {
+                const [medRows] = await pool.query(
+                    `SELECT medicine_category FROM medicine_heepit WHERE medicine_id = ? LIMIT 1`,
+                    [item.product_id]
+                );
+                productCategory = medRows.length ? medRows[0].medicine_category : null;
             }
 
             const cancelDate = new Date(Date.now() + meta.cancelDays * 24 * 60 * 60 * 1000);
@@ -346,26 +363,26 @@ exports.getOrderDetails = async (req, res) => {
 
         const giftIds = [];
         const shopIds = [];
-        const premiumIds = [];
+        const medicineIds = [];
         const cardIds = [];
 
         for (const item of rows) {
             const id = String(item.product_id);
             if (id.startsWith("G")) giftIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
-            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("M")) medicineIds.push(id);
             else cardIds.push(Number(id));
         }
 
-        const [[gifts], [shops], [premiums], [cards]] = await Promise.all([
+        const [[gifts], [shops], [medicines], [cards]] = await Promise.all([
             giftIds.length
                 ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
                 : Promise.resolve([[]]),
             shopIds.length
                 ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
                 : Promise.resolve([[]]),
-            premiumIds.length
-                ? pool.query(`SELECT * FROM medical_heepit WHERE premium_id IN (?)`, [premiumIds])
+            medicineIds.length
+                ? pool.query(`SELECT * FROM medicine_heepit WHERE medicine_id IN (?)`, [medicineIds])
                 : Promise.resolve([[]]),
             cardIds.length
                 ? pool.query(`SELECT * FROM cards_heepit WHERE product_id IN (?)`, [cardIds])
@@ -374,7 +391,7 @@ exports.getOrderDetails = async (req, res) => {
 
         const giftsMap = new Map(gifts.map((g) => [String(g.gift_id), g]));
         const shopsMap = new Map(shops.map((s) => [String(s.shop_id), s]));
-        const premiumsMap = new Map(premiums.map((p) => [String(p.premium_id), p]));
+        const medicinesMap = new Map(medicines.map((m) => [String(m.medicine_id), m]));
         const cardsMap = new Map(cards.map((c) => [String(c.product_id), c]));
 
         const result = rows.map((item) => {
@@ -412,19 +429,19 @@ exports.getOrderDetails = async (req, res) => {
                         product_status: product.shop_status,
                     };
                 }
-            } else if (id.startsWith("P")) {
-                product = premiumsMap.get(id);
+            } else if (id.startsWith("M")) {
+                product = medicinesMap.get(id);
                 if (product) {
                     productData = {
-                        product_name: product.premium_name,
-                        product_description: product.premium_description,
-                        product_price: product.premium_price,
-                        product_image1: product.premium_image1,
-                        product_image2: product.premium_image2,
-                        product_image3: product.premium_image3,
-                        product_image4: product.premium_image4,
-                        product_rating: product.premium_rating,
-                        product_status: product.premium_status,
+                        product_name: product.medicine_name,
+                        product_description: product.medicine_description,
+                        product_price: product.medicine_price,
+                        product_image1: product.medicine_image1,
+                        product_image2: product.medicine_image2,
+                        product_image3: product.medicine_image3,
+                        product_image4: null,
+                        product_rating: product.medicine_rating,
+                        product_status: product.medicine_status,
                     };
                 }
             } else {

@@ -4,7 +4,7 @@ const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 const PRODUCT_TABLES = {
     G: { table: "food_heepit", idCol: "gift_id", savesCol: "gift_total_saves", type: "gift" },
     S: { table: "shop_heepit", idCol: "shop_id", savesCol: "shop_total_saves", type: "shop" },
-    P: { table: "medical_heepit", idCol: "premium_id", savesCol: "premium_total_saves", type: "premium" },
+    M: { table: "medicine_heepit", idCol: "medicine_id", savesCol: "medicine_total_saves", type: "medicine" },
     DEFAULT: { table: "cards_heepit", idCol: "product_id", savesCol: "product_total_saves", type: "card" },
 };
 
@@ -53,24 +53,24 @@ exports.getWishlist = async (req, res) => {
         }
 
         const giftIds = [];
-        const premiumIds = [];
+        const medicineIds = [];
         const shopIds = [];
         const cardIds = [];
 
         for (const row of wishlistRows) {
             const id = String(row.product_id);
             if (id.startsWith("G")) giftIds.push(id);
-            else if (id.startsWith("P")) premiumIds.push(id);
+            else if (id.startsWith("M")) medicineIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
             else cardIds.push(Number(id));
         }
 
-        const [[gifts], [premiums], [shops], [cards]] = await Promise.all([
+        const [[gifts], [medicines], [shops], [cards]] = await Promise.all([
             giftIds.length
                 ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
                 : Promise.resolve([[]]),
-            premiumIds.length
-                ? pool.query(`SELECT * FROM medical_heepit WHERE premium_id IN (?)`, [premiumIds])
+            medicineIds.length
+                ? pool.query(`SELECT * FROM medicine_heepit WHERE medicine_id IN (?)`, [medicineIds])
                 : Promise.resolve([[]]),
             shopIds.length
                 ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
@@ -88,7 +88,7 @@ exports.getWishlist = async (req, res) => {
         const wishlist = [
             ...cards.map((item) => ({ ...item, type: "card", created_at: timeMap[item.product_id] })),
             ...gifts.map((item) => ({ ...item, type: "gift", created_at: timeMap[item.gift_id] })),
-            ...premiums.map((item) => ({ ...item, type: "premium", created_at: timeMap[item.premium_id] })),
+            ...medicines.map((item) => ({ ...item, type: "medicine", created_at: timeMap[item.medicine_id] })),
             ...shops.map((item) => ({ ...item, type: "shop", created_at: timeMap[item.shop_id] })),
         ];
 
