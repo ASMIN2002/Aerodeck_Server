@@ -13,7 +13,8 @@ const {
     uploadReviewImage,
     deleteReviewImage,
     uploadVideoHero,
-    uploadShopVideo
+    uploadShopVideo,
+    uploadShopModel3D
 } = require("../controllers/uploadController");
 
 router.post("/product", upload.single("image"), uploadProduct);
@@ -26,5 +27,6 @@ router.post("/review", upload.single("image"), uploadReviewImage);
 router.delete("/review/:media_id", deleteReviewImage);
 router.post("/video", upload.single("video"), uploadVideoHero);
 router.post("/shop-video", upload.single("video"), uploadShopVideo);
+router.post("/shop-model3d", upload.single("model"), uploadShopModel3D);
 
 module.exports = router;

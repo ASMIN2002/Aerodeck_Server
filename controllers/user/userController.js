@@ -10,7 +10,8 @@ const SAFE_USER_FIELDS = `
     is_mobile_verified,
     email,
     is_email_verified,
-    profile_image
+    profile_image,
+    created_at
 `;
 
 async function authenticate(session_token) {

@@ -397,3 +397,31 @@ exports.uploadShopVideo = async (req, res) => {
     return serverError(res, err, "SHOP VIDEO UPLOAD FAILED:");
   }
 };
+exports.uploadShopModel3D = async (req, res) => {
+  try {
+    if (!req.file) return badRequest(res, "No Model Selected");
+    const { shop_id, image_no } = req.body;
+    if (!shop_id || !image_no) return badRequest(res, "Shop ID & Image No Required");
+    const ext = (req.file.originalname || "").split(".").pop().toLowerCase();
+    if (!["glb", "gltf"].includes(ext)) return badRequest(res, "Only .glb or .gltf files allowed");
+    const [rows] = await db.query(`SELECT shop_image${image_no} AS old_url FROM shop_heepit WHERE shop_id = ?`, [shop_id]);
+    if (rows.length > 0 && rows[0].old_url) {
+      const oldUrl = rows[0].old_url;
+      const oldPublicId = getPublicId(oldUrl);
+      if (oldPublicId) {
+        const oldType = /\.(glb|gltf)(\?|$)/i.test(oldUrl) ? "raw" : "image";
+        await deleteFromCloudinary(oldPublicId, oldType);
+      }
+    }
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: "AERODECK/SHOP/MODELS3D",
+      public_id: `shop_${shop_id}_model${image_no}.glb`,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "raw",
+    });
+    return res.json({ success: true, url: result.secure_url, public_id: result.public_id });
+  } catch (err) {
+    return serverError(res, err, "MODEL 3D UPLOAD FAILED:");
+  }
+};
