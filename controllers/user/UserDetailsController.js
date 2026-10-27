@@ -7,7 +7,7 @@ const PRODUCT_TABLES = {
         columns: `gift_id, gift_name, gift_description, gift_category, gift_company,
                   gift_price, gift_demo_price, gift_discount_percentage, gift_rating,
                   gift_highlight_text, gift_status,
-                  gift_image1, gift_image2, gift_image3,
+                  gift_image1, gift_image2, gift_image3, gift_image4,
                   gift_total_likes, gift_total_saves, gift_created_at`,
     },
     medicine: {
@@ -26,7 +26,7 @@ const PRODUCT_TABLES = {
         columns: `product_id, product_name, product_description, product_category,
                   product_price, product_demo_price, product_discount_percentage,
                   product_rating, product_highlight_text, product_status,
-                  product_image1, product_image2, product_image3,
+                  product_image1, product_image2, product_image3, product_image4,
                   product_total_likes, product_total_saves, product_created_at`,
     },
     shop: {
@@ -35,7 +35,7 @@ const PRODUCT_TABLES = {
         columns: `shop_id, shop_name, shop_description, shop_category,
                   shop_price, shop_demo_price, shop_discount_percentage,
                   shop_rating, shop_highlight_text, shop_status,
-                  shop_image1, shop_image2, shop_image3,
+                  shop_image1, shop_image2, shop_image3, shop_image4,
                   shop_total_likes, shop_total_saves, shop_created_at`,
     },
 };
