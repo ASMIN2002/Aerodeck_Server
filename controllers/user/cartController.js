@@ -17,15 +17,19 @@ function serverError(res, err, context = "Server error.") {
     return res.status(500).json({ success: false, message: context });
 }
 
+const emptyQuery = () => Promise.resolve([[]]);
+
 exports.getCart = async (req, res) => {
     try {
         const user_id = await authenticate(req.query.session_token);
-
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const [cartRows] = await pool.query(
-            `SELECT * FROM user_cart_heepit WHERE user_id = ? ORDER BY created_at DESC`,
+            `SELECT cart_id, product_id, quantity, created_at
+             FROM user_cart_heepit
+             WHERE user_id = ?
+             ORDER BY created_at DESC`,
             [user_id]
         );
 
@@ -36,63 +40,63 @@ exports.getCart = async (req, res) => {
         const giftIds = [];
         const medicineIds = [];
         const shopIds = [];
-        const cardIds = [];
 
         for (const cart of cartRows) {
             const id = String(cart.product_id);
             if (id.startsWith("G")) giftIds.push(id);
             else if (id.startsWith("M")) medicineIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
-            else cardIds.push(Number(id));
         }
 
-        const [[gifts], [medicines], [shops], [cards]] = await Promise.all([
+        const [[gifts], [medicines], [shops]] = await Promise.all([
             giftIds.length
-                ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
-                : Promise.resolve([[]]),
-            medicineIds.length
-                ? pool.query(`SELECT * FROM medicine_heepit WHERE medicine_id IN (?)`, [medicineIds])
-                : Promise.resolve([[]]),
-            shopIds.length
-                ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
-                : Promise.resolve([[]]),
-            cardIds.length
                 ? pool.query(
-                    `SELECT p.*, d.delivery
-                     FROM cards_heepit p
-                     LEFT JOIN product_details_heepit d ON p.product_id = d.product_id
-                     WHERE p.product_id IN (?)`,
-                    [cardIds]
+                    `SELECT gift_id, gift_name, gift_image1, gift_price, gift_demo_price,
+                            gift_discount_percentage, gift_rating, gift_status
+                     FROM food_heepit WHERE gift_id IN (?)`,
+                    [giftIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
+            medicineIds.length
+                ? pool.query(
+                    `SELECT medicine_id, medicine_name, medicine_image1, medicine_price, medicine_demo_price,
+                            medicine_discount_percentage, medicine_rating, medicine_status
+                     FROM medicine_heepit WHERE medicine_id IN (?)`,
+                    [medicineIds]
+                )
+                : emptyQuery(),
+            shopIds.length
+                ? pool.query(
+                    `SELECT shop_id, shop_name, shop_image1, shop_price, shop_demo_price,
+                            shop_discount_percentage, shop_rating, shop_status
+                     FROM shop_heepit WHERE shop_id IN (?)`,
+                    [shopIds]
+                )
+                : emptyQuery(),
         ]);
 
         const giftsMap = new Map(gifts.map((g) => [String(g.gift_id), g]));
         const medicinesMap = new Map(medicines.map((m) => [String(m.medicine_id), m]));
         const shopsMap = new Map(shops.map((s) => [String(s.shop_id), s]));
-        const cardsMap = new Map(cards.map((c) => [String(c.product_id), c]));
 
-        const finalCart = cartRows
-            .map((cart) => {
-                const id = String(cart.product_id);
-                let item = null;
+        const finalCart = [];
+        for (const cart of cartRows) {
+            const id = String(cart.product_id);
+            let item = null;
+            if (id.startsWith("G")) item = giftsMap.get(id);
+            else if (id.startsWith("M")) item = medicinesMap.get(id);
+            else if (id.startsWith("S")) item = shopsMap.get(id);
 
-                if (id.startsWith("G")) item = giftsMap.get(id);
-                else if (id.startsWith("M")) item = medicinesMap.get(id);
-                else if (id.startsWith("S")) item = shopsMap.get(id);
-                else item = cardsMap.get(id);
+            if (!item) continue;
 
-                if (!item) return null;
-
-                return {
-                    ...item,
-                    cart_id: cart.cart_id,
-                    quantity: cart.quantity,
-                    product_id: cart.product_id,
-                    created_at: cart.created_at,
-                };
-            })
-            .filter(Boolean);
+            finalCart.push({
+                ...item,
+                cart_id: cart.cart_id,
+                quantity: cart.quantity,
+                product_id: cart.product_id,
+                created_at: cart.created_at,
+            });
+        }
 
         return res.json({ success: true, message: "Cart fetched successfully.", data: finalCart });
     } catch (err) {
@@ -108,10 +112,14 @@ exports.addToCart = async (req, res) => {
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-        const finalQuantity = Math.max(quantity, getMinQuantity(product_id));
+        if (!product_id) {
+            return res.status(400).json({ success: false, message: "Product ID required." });
+        }
+
+        const finalQuantity = Math.max(Number(quantity) || 1, getMinQuantity(product_id));
 
         const [exists] = await pool.query(
-            `SELECT cart_id FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
+            `SELECT cart_id FROM user_cart_heepit WHERE user_id = ? AND product_id = ? LIMIT 1`,
             [user_id, product_id]
         );
 
@@ -137,12 +145,20 @@ exports.updateQuantity = async (req, res) => {
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-        const finalQuantity = Math.max(quantity, getMinQuantity(product_id));
+        if (!product_id) {
+            return res.status(400).json({ success: false, message: "Product ID required." });
+        }
 
-        await pool.query(
+        const finalQuantity = Math.max(Number(quantity) || 1, getMinQuantity(product_id));
+
+        const [result] = await pool.query(
             `UPDATE user_cart_heepit SET quantity = ? WHERE user_id = ? AND product_id = ?`,
             [finalQuantity, user_id, product_id]
         );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Cart item not found." });
+        }
 
         return res.json({ success: true, message: "Quantity updated." });
     } catch (err) {
@@ -153,17 +169,24 @@ exports.updateQuantity = async (req, res) => {
 exports.removeFromCart = async (req, res) => {
     try {
         const { session_token } = req.body;
+        const { productId } = req.params;
 
         const user_id = await authenticate(session_token);
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-        const { productId } = req.params;
+        if (!productId) {
+            return res.status(400).json({ success: false, message: "Product ID required." });
+        }
 
-        await pool.query(
+        const [result] = await pool.query(
             `DELETE FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
             [user_id, productId]
         );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Cart item not found." });
+        }
 
         return res.json({ success: true, message: "Product removed from cart." });
     } catch (err) {

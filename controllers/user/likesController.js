@@ -2,9 +2,27 @@ const pool = require("../../config/db");
 const getUserIdFromSession = require("../../middleware/getUserIdFromSession");
 
 const PRODUCT_CONFIG = {
-    G: { table: "food_heepit", idCol: "gift_id", likesCol: "gift_total_likes" },
-    S: { table: "shop_heepit", idCol: "shop_id", likesCol: "shop_total_likes" },
-    DEFAULT: { table: "cards_heepit", idCol: "product_id", likesCol: "product_total_likes" },
+    G: {
+        table: "food_heepit",
+        idCol: "gift_id",
+        likesCol: "gift_total_likes",
+        nameCol: "gift_name",
+        imageCol: "gift_image1",
+    },
+    S: {
+        table: "shop_heepit",
+        idCol: "shop_id",
+        likesCol: "shop_total_likes",
+        nameCol: "shop_name",
+        imageCol: "shop_image1",
+    },
+    DEFAULT: {
+        table: "cards_heepit",
+        idCol: "product_id",
+        likesCol: "product_total_likes",
+        nameCol: "product_name",
+        imageCol: "product_image1",
+    },
 };
 
 function getProductConfig(productId) {
@@ -21,6 +39,8 @@ function serverError(res, err, context = "Server error.") {
     console.error(context, err.message);
     return res.status(500).json({ success: false, message: context });
 }
+
+const emptyQuery = () => Promise.resolve([[]]);
 
 async function updateLikesCount(productId, delta) {
     const { table, idCol, likesCol } = getProductConfig(productId);
@@ -48,7 +68,7 @@ exports.getLikes = async (req, res) => {
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const [rows] = await pool.query(
-            `SELECT * FROM likes_heepit WHERE user_id = ?`,
+            `SELECT like_id, product_id FROM likes_heepit WHERE user_id = ?`,
             [user_id]
         );
 
@@ -84,7 +104,6 @@ exports.getMyLikes = async (req, res) => {
             const id = String(l.product_id);
             if (id.startsWith("G")) giftIds.push(id);
             else if (id.startsWith("S")) shopIds.push(id);
-            else if (id.startsWith("M")) continue;
             else cardIds.push(Number(id));
         }
 
@@ -95,53 +114,71 @@ exports.getMyLikes = async (req, res) => {
                      FROM food_heepit WHERE gift_id IN (?)`,
                     [giftIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
             shopIds.length
                 ? pool.query(
                     `SELECT shop_id AS id, shop_name AS name, shop_image1 AS image, shop_total_likes AS total_likes
                      FROM shop_heepit WHERE shop_id IN (?)`,
                     [shopIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
             cardIds.length
                 ? pool.query(
                     `SELECT product_id AS id, product_name AS name, product_image1 AS image, product_total_likes AS total_likes
                      FROM cards_heepit WHERE product_id IN (?)`,
                     [cardIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
         ]);
 
         const giftsMap = new Map(gifts.map((g) => [String(g.id), { ...g, type: "gifts" }]));
         const shopsMap = new Map(shops.map((s) => [String(s.id), { ...s, type: "shop" }]));
         const cardsMap = new Map(cards.map((c) => [String(c.id), { ...c, type: "products" }]));
 
-        const data = likes
-            .map((l) => {
-                const id = String(l.product_id);
+        const data = [];
+        for (const l of likes) {
+            const id = String(l.product_id);
+            let product = null;
+            if (id.startsWith("G")) product = giftsMap.get(id);
+            else if (id.startsWith("S")) product = shopsMap.get(id);
+            else product = cardsMap.get(id);
 
-                let product = null;
-                if (id.startsWith("G")) product = giftsMap.get(id);
-                else if (id.startsWith("S")) product = shopsMap.get(id);
-                else if (id.startsWith("M")) return null;
-                else product = cardsMap.get(id);
+            if (!product) continue;
 
-                if (!product) return null;
-
-                return {
-                    like_id: l.like_id,
-                    product_id: l.product_id,
-                    product_name: product.name,
-                    product_image: product.image,
-                    total_likes: product.total_likes,
-                    product_type: product.type,
-                };
-            })
-            .filter(Boolean);
+            data.push({
+                like_id: l.like_id,
+                product_id: l.product_id,
+                product_name: product.name,
+                product_image: product.image,
+                total_likes: product.total_likes,
+                product_type: product.type,
+            });
+        }
 
         return res.json({ success: true, data });
     } catch (err) {
         return serverError(res, err, "Fetch my likes failed.");
+    }
+};
+
+exports.getLikedIds = async (req, res) => {
+    try {
+        const user_id = await authenticate(req.query.session_token);
+
+        if (!user_id)
+            return res.status(401).json({ success: false, message: "Invalid or expired session." });
+
+        const [rows] = await pool.query(
+            `SELECT product_id FROM likes_heepit WHERE user_id = ?`,
+            [user_id]
+        );
+
+        return res.json({
+            success: true,
+            data: rows.map((r) => String(r.product_id)),
+        });
+    } catch (err) {
+        return serverError(res, err, "Fetch liked ids failed.");
     }
 };
 
@@ -153,18 +190,29 @@ exports.likeProduct = async (req, res) => {
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
+        if (!product_id) {
+            return res.status(400).json({ success: false, message: "Product ID required." });
+        }
+
         const [exists] = await pool.query(
-            `SELECT like_id FROM likes_heepit WHERE user_id = ? AND product_id = ?`,
+            `SELECT like_id FROM likes_heepit WHERE user_id = ? AND product_id = ? LIMIT 1`,
             [user_id, product_id]
         );
 
         if (exists.length > 0)
             return res.json({ success: false, message: "Already liked." });
 
-        await pool.query(
-            `INSERT INTO likes_heepit (user_id, product_id) VALUES (?, ?)`,
-            [user_id, product_id]
-        );
+        try {
+            await pool.query(
+                `INSERT INTO likes_heepit (user_id, product_id) VALUES (?, ?)`,
+                [user_id, product_id]
+            );
+        } catch (insertErr) {
+            if (insertErr.code === "ER_DUP_ENTRY") {
+                return res.json({ success: false, message: "Already liked." });
+            }
+            throw insertErr;
+        }
 
         const totalLikes = await updateLikesCount(product_id, 1);
 
@@ -177,17 +225,24 @@ exports.likeProduct = async (req, res) => {
 exports.unlikeProduct = async (req, res) => {
     try {
         const { session_token } = req.body;
+        const { productId } = req.params;
 
         const user_id = await authenticate(session_token);
         if (!user_id)
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
-        const { productId } = req.params;
+        if (!productId) {
+            return res.status(400).json({ success: false, message: "Product ID required." });
+        }
 
-        await pool.query(
+        const [result] = await pool.query(
             `DELETE FROM likes_heepit WHERE user_id = ? AND product_id = ?`,
             [user_id, productId]
         );
+
+        if (result.affectedRows === 0) {
+            return res.json({ success: false, message: "Like not found." });
+        }
 
         const totalLikes = await updateLikesCount(productId, -1);
 

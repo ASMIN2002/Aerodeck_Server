@@ -1,11 +1,6 @@
 const pool = require("../../config/db");
 
-exports.getProducts = async (req, res) => {
-
-    try {
-
-        const [rows] = await pool.query(`
-           SELECT
+const CARD_COLUMNS = `
     product_id,
     product_name,
     product_category,
@@ -22,53 +17,64 @@ exports.getProducts = async (req, res) => {
     product_total_saves,
     product_rating,
     product_status
-FROM cards_heepit
-ORDER BY product_id DESC
-        `);
+`;
 
-        res.json({
-            success: true,
-            data: rows
-        });
+function serverError(res, err, context = "Server Error") {
+    console.error(context, err.message);
+    return res.status(500).json({ success: false, message: context });
+}
 
-    } catch (err) {
-
-        console.log(err);
-
-        res.status(500).json({
-            success: false,
-            message: err.message
-        });
-
-    }
-
-};
-exports.getRelatedProducts = async (req, res) => {
-
+exports.getProducts = async (req, res) => {
     try {
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 500);
+        const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+        const category = req.query.category;
 
+        let query = `SELECT ${CARD_COLUMNS} FROM cards_heepit`;
+        const params = [];
+
+        if (category) {
+            query += ` WHERE product_category = ?`;
+            params.push(category);
+        }
+
+        query += ` ORDER BY product_id DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+
+        const [rows] = await pool.query(query, params);
+
+        return res.json({
+            success: true,
+            data: rows,
+            pagination: { limit, offset, count: rows.length },
+        });
+    } catch (err) {
+        return serverError(res, err, "getProducts failed");
+    }
+};
+
+exports.getRelatedProducts = async (req, res) => {
+    try {
         const { category, exclude } = req.query;
 
-        const [rows] = await pool.query(
-            `
-            SELECT *
-            FROM cards_heepit
-            WHERE product_category = ?
-              AND product_id != ?
-              AND product_status = 1
-            ORDER BY product_id DESC
-            LIMIT 10
-            `,
-            [category, exclude]
-        );
+        if (!category) {
+            return res.status(400).json({ success: false, message: "category is required" });
+        }
 
-        res.json(rows);
+        let query = `SELECT ${CARD_COLUMNS} FROM cards_heepit WHERE product_category = ? AND product_status = 1`;
+        const params = [category];
 
+        if (exclude) {
+            query += ` AND product_id != ?`;
+            params.push(exclude);
+        }
+
+        query += ` ORDER BY product_id DESC LIMIT 10`;
+
+        const [rows] = await pool.query(query, params);
+
+        return res.json({ success: true, data: rows });
     } catch (err) {
-
-        console.error(err);
-        res.status(500).json({ message: "Server Error" });
-
+        return serverError(res, err, "getRelatedProducts failed");
     }
-
 };

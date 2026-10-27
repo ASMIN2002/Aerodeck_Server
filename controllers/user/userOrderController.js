@@ -52,17 +52,17 @@ async function safeNotify(user_id, title, body, data) {
     }
 }
 
-async function upsertProcessingStatus(item_id, order_status) {
+async function upsertProcessingStatus(conn, item_id, order_status) {
     const todayStr = formatProcessingDate(new Date());
     const newEntry = `${order_status}~${todayStr}`;
 
-    const [existing] = await pool.query(
+    const [existing] = await conn.query(
         `SELECT id, processing_update FROM processing_updates WHERE item_id = ? LIMIT 1`,
         [item_id]
     );
 
     if (existing.length === 0) {
-        await pool.query(
+        await conn.query(
             `INSERT INTO processing_updates (item_id, processing_update) VALUES (?, ?)`,
             [item_id, newEntry]
         );
@@ -84,26 +84,20 @@ async function upsertProcessingStatus(item_id, order_status) {
 
     if (!found) updatedEntries.push(newEntry);
 
-    await pool.query(
+    await conn.query(
         `UPDATE processing_updates SET processing_update = ? WHERE id = ?`,
         [updatedEntries.join(","), existing[0].id]
     );
 }
 
-async function insertCancelRequest({
-    order_item_id,
-    product_id,
-    user_id,
-    product_category,
-    quantity,
-    cancel_reason,
-    order_date,
-    payment_status,
+async function insertCancelRequest(conn, {
+    order_item_id, product_id, user_id, product_category,
+    quantity, cancel_reason, order_date, payment_status,
 }) {
     const mysqlOrderDate = formatMySQLDate(order_date);
     const status = payment_status === "PARTIAL" ? "PAID" : payment_status;
 
-    await pool.query(
+    await conn.query(
         `INSERT INTO cancel_heepit (
             order_item_id, product_id, user_id, product_category, quantity,
             cancel_reason, order_date, payment_status, cancel_status
@@ -111,7 +105,7 @@ async function insertCancelRequest({
         [order_item_id, product_id, user_id, product_category, quantity, cancel_reason, mysqlOrderDate, status, "REQUESTED"]
     );
 
-    await pool.query(
+    await conn.query(
         `UPDATE order_items_heepit SET order_status = 'REQUESTED' WHERE order_item_id = ?`,
         [order_item_id]
     );
@@ -147,14 +141,15 @@ function buildProductMeta(item) {
     }
     return {
         productType: "CARD",
-        productName: item.card_name,
-        productImage: item.card_image1,
-        unitPrice: Number(item.card_price),
+        productName: item.product_name,
+        productImage: item.product_image1,
+        unitPrice: Number(item.product_price),
         cancelDays: 1,
     };
 }
 
 exports.placeOrder = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const {
             session_token, address_id, payment_method, order_type, items,
@@ -163,54 +158,91 @@ exports.placeOrder = async (req, res) => {
         } = req.body;
 
         const user_id = await authenticate(session_token);
-        if (!user_id) return unauthorized(res);
+        if (!user_id) {
+            conn.release();
+            return unauthorized(res);
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "Items required." });
+        }
 
         const orderNumber = "AD" + Date.now();
         const paymentStatus =
             payment_method === "COD" ? "PENDING" : order_type === "CARD" ? "PARTIAL" : "PAID";
 
-        const [orderResult] = await pool.query(
-            `INSERT INTO orders_heepit (
-                order_number, user_id, order_type, total_items, subtotal, discount,
-                gst, platform_fee, delivery_fee, total_amount, payment_method,
-                payment_status, order_status, address_id, is_hypo_used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                orderNumber, user_id,
-                order_type === "PRODUCT" ? "PRODUCT" : "CARD",
-                total_items, subtotal, 0, gst, platform_fee, delivery_fee,
-                total_amount, payment_method, paymentStatus, "PLACED",
-                address_id, hypo_points_used > 0 ? 1 : 0,
-            ]
-        );
+        await conn.beginTransaction();
+        try {
+            const [orderResult] = await conn.query(
+                `INSERT INTO orders_heepit (
+                    order_number, user_id, order_type, total_items, subtotal, discount,
+                    gst, platform_fee, delivery_fee, total_amount, payment_method,
+                    payment_status, order_status, address_id, is_hypo_used
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    orderNumber, user_id,
+                    order_type === "PRODUCT" ? "PRODUCT" : "CARD",
+                    total_items, subtotal, 0, gst, platform_fee, delivery_fee,
+                    total_amount, payment_method, paymentStatus, "PLACED",
+                    address_id, hypo_points_used > 0 ? 1 : 0,
+                ]
+            );
 
-        const order_id = orderResult.insertId;
+            const order_id = orderResult.insertId;
 
-        await pool.query(
-            `INSERT INTO payment_heepit (order_id, user_id, payment_method, payment_status, amount)
-             VALUES (?, ?, ?, ?, ?)`,
-            [order_id, user_id, payment_method, paymentStatus, total_amount]
-        );
+            await conn.query(
+                `INSERT INTO payment_heepit (order_id, user_id, payment_method, payment_status, amount)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [order_id, user_id, payment_method, paymentStatus, total_amount]
+            );
 
-        for (const item of items) {
-            const meta = buildProductMeta(item);
-            let productCategory = null;
+            for (const item of items) {
+                const meta = buildProductMeta(item);
+                let productCategory = null;
+                let postedBy = null;
 
-            if (meta.productType === "SHOP") {
-                const [shopRows] = await pool.query(
-                    `SELECT shop_category, posted_by FROM shop_heepit WHERE shop_id = ? LIMIT 1`,
-                    [item.product_id]
+                if (meta.productType === "SHOP") {
+                    const [shopRows] = await conn.query(
+                        `SELECT shop_category, posted_by FROM shop_heepit WHERE shop_id = ? LIMIT 1`,
+                        [item.product_id]
+                    );
+                    productCategory = shopRows.length ? shopRows[0].shop_category : null;
+                    postedBy = shopRows.length ? shopRows[0].posted_by : null;
+                }
+
+                if (meta.productType === "MEDICINE") {
+                    const [medRows] = await conn.query(
+                        `SELECT medicine_category FROM medicine_heepit WHERE medicine_id = ? LIMIT 1`,
+                        [item.product_id]
+                    );
+                    productCategory = medRows.length ? medRows[0].medicine_category : null;
+                }
+
+                const cancelDate = new Date(Date.now() + meta.cancelDays * 24 * 60 * 60 * 1000);
+
+                const [itemResult] = await conn.query(
+                    `INSERT INTO order_items_heepit (
+                        order_id, product_id, product_type, category, product_name,
+                        product_image, unit_price, quantity, total_price,
+                        order_status, payment_status, cancel_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        order_id, item.product_id, meta.productType, productCategory,
+                        meta.productName, meta.productImage, meta.unitPrice, item.quantity,
+                        meta.unitPrice * item.quantity, "PLACED", paymentStatus, cancelDate,
+                    ]
                 );
 
-                productCategory = shopRows.length ? shopRows[0].shop_category : null;
+                await upsertProcessingStatus(conn, itemResult.insertId, "PLACED");
 
-                if (shopRows.length && shopRows[0].posted_by) {
-                    const [adminRows] = await pool.query(
+                if (postedBy) {
+                    const [adminRows] = await conn.query(
                         `SELECT id FROM heepitadmin WHERE username = ? LIMIT 1`,
-                        [shopRows[0].posted_by]
+                        [postedBy]
                     );
                     if (adminRows.length > 0) {
-                        await pool.query(
+                        await conn.query(
                             `UPDATE heepitadmin_stats SET pending = pending + 1 WHERE admin_id = ?`,
                             [adminRows[0].id]
                         );
@@ -218,60 +250,36 @@ exports.placeOrder = async (req, res) => {
                 }
             }
 
-            if (meta.productType === "MEDICINE") {
-                const [medRows] = await pool.query(
-                    `SELECT medicine_category FROM medicine_heepit WHERE medicine_id = ? LIMIT 1`,
-                    [item.product_id]
+            for (const item of items) {
+                await conn.query(
+                    `DELETE FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
+                    [user_id, item.product_id]
                 );
-                productCategory = medRows.length ? medRows[0].medicine_category : null;
             }
 
-            const cancelDate = new Date(Date.now() + meta.cancelDays * 24 * 60 * 60 * 1000);
+            await conn.commit();
+            conn.release();
 
-            const [itemResult] = await pool.query(
-                `INSERT INTO order_items_heepit (
-                    order_id, product_id, product_type, category, product_name,
-                    product_image, unit_price, quantity, total_price,
-                    order_status, payment_status, cancel_date
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    order_id, item.product_id, meta.productType, productCategory,
-                    meta.productName, meta.productImage, meta.unitPrice, item.quantity,
-                    meta.unitPrice * item.quantity, "PLACED", paymentStatus, cancelDate,
-                ]
+            await safeNotify(
+                user_id,
+                "Order Placed ✅",
+                `Your order #${order_id} has been placed successfully.`,
+                { order_id: String(order_id) }
             );
 
-            await upsertProcessingStatus(itemResult.insertId, "PLACED");
-
-            await pool.query(
-                `UPDATE order_items_heepit
-                 SET payment_status = (SELECT payment_status FROM orders_heepit WHERE order_id = ?)
-                 WHERE order_id = ?`,
-                [order_id, order_id]
-            );
+            return res.json({
+                success: true,
+                message: "Order Placed Successfully",
+                order_id,
+                order_number: orderNumber,
+            });
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            throw txErr;
         }
-
-        for (const item of items) {
-            await pool.query(
-                `DELETE FROM user_cart_heepit WHERE user_id = ? AND product_id = ?`,
-                [user_id, item.product_id]
-            );
-        }
-
-        await safeNotify(
-            user_id,
-            "Order Placed ✅",
-            `Your order #${order_id} has been placed successfully.`,
-            { order_id: String(order_id) }
-        );
-
-        return res.json({
-            success: true,
-            message: "Order Placed Successfully",
-            order_id,
-            order_number: orderNumber,
-        });
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };
@@ -291,7 +299,8 @@ exports.getOrders = async (req, res) => {
              FROM orders_heepit o
              LEFT JOIN user_address_heepit a ON o.address_id = a.address_id
              WHERE o.user_id = ?
-             ORDER BY o.created_at DESC`,
+             ORDER BY o.created_at DESC
+             LIMIT 100`,
             [user_id]
         );
 
@@ -313,24 +322,10 @@ exports.getOrders = async (req, res) => {
             counts.map((c) => [c.order_id, { total: Number(c.total || 0), available: Number(c.available || 0) }])
         );
 
-        const ordersToCancel = [];
-
         for (const order of rows) {
             const c = countsMap.get(order.order_id) || { total: 0, available: 0 };
             order.available_items = c.available;
             order.total_items = c.total;
-
-            if (c.available === 0 && c.total > 0) {
-                ordersToCancel.push(order.order_id);
-                order.order_status = "CANCELLED";
-            }
-        }
-
-        if (ordersToCancel.length) {
-            await pool.query(
-                `UPDATE orders_heepit SET order_status = 'CANCELLED' WHERE order_id IN (?)`,
-                [ordersToCancel]
-            );
         }
 
         return res.json({ success: true, data: rows });
@@ -342,6 +337,10 @@ exports.getOrders = async (req, res) => {
 exports.getOrderDetails = async (req, res) => {
     try {
         const { order_id } = req.params;
+        const session_token = req.query.session_token || req.body.session_token;
+
+        const user_id = await authenticate(session_token);
+        if (!user_id) return unauthorized(res);
 
         const [rows] = await pool.query(
             `SELECT
@@ -355,116 +354,11 @@ exports.getOrderDetails = async (req, res) => {
              FROM order_items_heepit oi
              INNER JOIN orders_heepit o ON oi.order_id = o.order_id
              LEFT JOIN return_heepit r ON oi.order_item_id = r.order_item_id
-             WHERE oi.order_id = ?`,
-            [order_id]
+             WHERE oi.order_id = ? AND o.user_id = ?`,
+            [order_id, user_id]
         );
 
-        if (!rows.length) return res.json({ success: true, data: [] });
-
-        const giftIds = [];
-        const shopIds = [];
-        const medicineIds = [];
-        const cardIds = [];
-
-        for (const item of rows) {
-            const id = String(item.product_id);
-            if (id.startsWith("G")) giftIds.push(id);
-            else if (id.startsWith("S")) shopIds.push(id);
-            else if (id.startsWith("M")) medicineIds.push(id);
-            else cardIds.push(Number(id));
-        }
-
-        const [[gifts], [shops], [medicines], [cards]] = await Promise.all([
-            giftIds.length
-                ? pool.query(`SELECT * FROM food_heepit WHERE gift_id IN (?)`, [giftIds])
-                : Promise.resolve([[]]),
-            shopIds.length
-                ? pool.query(`SELECT * FROM shop_heepit WHERE shop_id IN (?)`, [shopIds])
-                : Promise.resolve([[]]),
-            medicineIds.length
-                ? pool.query(`SELECT * FROM medicine_heepit WHERE medicine_id IN (?)`, [medicineIds])
-                : Promise.resolve([[]]),
-            cardIds.length
-                ? pool.query(`SELECT * FROM cards_heepit WHERE product_id IN (?)`, [cardIds])
-                : Promise.resolve([[]]),
-        ]);
-
-        const giftsMap = new Map(gifts.map((g) => [String(g.gift_id), g]));
-        const shopsMap = new Map(shops.map((s) => [String(s.shop_id), s]));
-        const medicinesMap = new Map(medicines.map((m) => [String(m.medicine_id), m]));
-        const cardsMap = new Map(cards.map((c) => [String(c.product_id), c]));
-
-        const result = rows.map((item) => {
-            const id = String(item.product_id);
-            let product = null;
-            let productData = {};
-
-            if (id.startsWith("G")) {
-                product = giftsMap.get(id);
-                if (product) {
-                    productData = {
-                        product_name: product.gift_name,
-                        product_description: product.gift_description,
-                        product_price: product.gift_price,
-                        product_image1: product.gift_image1,
-                        product_image2: product.gift_image2,
-                        product_image3: product.gift_image3,
-                        product_image4: product.gift_image4,
-                        product_rating: product.gift_rating,
-                        product_status: product.gift_status,
-                    };
-                }
-            } else if (id.startsWith("S")) {
-                product = shopsMap.get(id);
-                if (product) {
-                    productData = {
-                        product_name: product.shop_name,
-                        product_description: product.shop_description,
-                        product_price: product.shop_price,
-                        product_image1: product.shop_image1,
-                        product_image2: product.shop_image2,
-                        product_image3: product.shop_image3,
-                        product_image4: product.shop_image4,
-                        product_rating: product.shop_rating,
-                        product_status: product.shop_status,
-                    };
-                }
-            } else if (id.startsWith("M")) {
-                product = medicinesMap.get(id);
-                if (product) {
-                    productData = {
-                        product_name: product.medicine_name,
-                        product_description: product.medicine_description,
-                        product_price: product.medicine_price,
-                        product_image1: product.medicine_image1,
-                        product_image2: product.medicine_image2,
-                        product_image3: product.medicine_image3,
-                        product_image4: null,
-                        product_rating: product.medicine_rating,
-                        product_status: product.medicine_status,
-                    };
-                }
-            } else {
-                product = cardsMap.get(id);
-                if (product) {
-                    productData = {
-                        product_name: product.product_name,
-                        product_description: product.product_description,
-                        product_price: product.product_price,
-                        product_image1: product.product_image1,
-                        product_image2: product.product_image2,
-                        product_image3: product.product_image3,
-                        product_image4: product.product_image4,
-                        product_rating: product.product_rating,
-                        product_status: product.product_status,
-                    };
-                }
-            }
-
-            return { ...item, ...productData };
-        });
-
-        return res.json({ success: true, data: result });
+        return res.json({ success: true, data: rows });
     } catch (err) {
         return serverError(res, err);
     }
@@ -475,7 +369,7 @@ exports.updateReturnDate = async (req, res) => {
         const { order_id, product_id } = req.body;
 
         const [rows] = await pool.query(
-            `SELECT return_days FROM product_details_heepit WHERE product_id = ?`,
+            `SELECT return_days FROM product_details_heepit WHERE product_id = ? LIMIT 1`,
             [product_id]
         );
 
@@ -486,12 +380,15 @@ exports.updateReturnDate = async (req, res) => {
             returnDate.setDate(returnDate.getDate() + Number(rows[0].return_days));
         }
 
-        await pool.query(
+        const [result] = await pool.query(
             `UPDATE order_items_heepit
              SET return_date = ?, return_status = 'NONE'
              WHERE order_id = ? AND product_id = ?`,
             [returnDate, order_id, product_id]
         );
+
+        if (result.affectedRows === 0)
+            return res.status(404).json({ success: false, message: "Order item not found." });
 
         return res.json({ success: true, message: "Return date updated." });
     } catch (err) {
@@ -500,52 +397,85 @@ exports.updateReturnDate = async (req, res) => {
 };
 
 exports.updateOrderItemStatus = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const { order_id, product_id, order_status } = req.body;
 
-        await pool.query(
-            `UPDATE order_items_heepit
-             SET order_status = ?
-             WHERE order_id = ? AND product_id = ?`,
-            [order_status, order_id, product_id]
-        );
+        await conn.beginTransaction();
+        try {
+            const [result] = await conn.query(
+                `UPDATE order_items_heepit
+                 SET order_status = ?
+                 WHERE order_id = ? AND product_id = ?`,
+                [order_status, order_id, product_id]
+            );
 
-        const [rows] = await pool.query(
-            `SELECT COUNT(*) AS pending FROM order_items_heepit
-             WHERE order_id = ? AND order_status != 'DELIVERED'`,
-            [order_id]
-        );
+            if (result.affectedRows === 0) {
+                await conn.rollback();
+                conn.release();
+                return res.status(404).json({ success: false, message: "Order item not found." });
+            }
 
-        const newStatus = rows[0].pending === 0 ? "COMPLETE" : "PLACED";
+            const [rows] = await conn.query(
+                `SELECT COUNT(*) AS pending FROM order_items_heepit
+                 WHERE order_id = ? AND order_status != 'DELIVERED'`,
+                [order_id]
+            );
 
-        await pool.query(
-            `UPDATE orders_heepit SET order_status = ? WHERE order_id = ?`,
-            [newStatus, order_id]
-        );
+            const newStatus = rows[0].pending === 0 ? "COMPLETE" : "PLACED";
 
-        return res.json({ success: true, message: "Status Updated" });
+            await conn.query(
+                `UPDATE orders_heepit SET order_status = ? WHERE order_id = ?`,
+                [newStatus, order_id]
+            );
+
+            await conn.commit();
+            conn.release();
+            return res.json({ success: true, message: "Status Updated" });
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            throw txErr;
+        }
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };
 
 exports.cancelOrder = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const {
-            order_item_id, product_id, user_id, product_category,
-            quantity, order_date, payment_status, cancel_reason,
+            session_token, order_item_id, product_id,
+            product_category, quantity, order_date, payment_status, cancel_reason,
         } = req.body;
 
-        await insertCancelRequest({
-            order_item_id,
-            product_id,
-            user_id,
-            product_category,
-            quantity,
-            cancel_reason,
-            order_date,
-            payment_status,
-        });
+        const user_id = await authenticate(session_token);
+        if (!user_id) {
+            conn.release();
+            return unauthorized(res);
+        }
+
+        if (!order_item_id || !product_id) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "order_item_id and product_id required." });
+        }
+
+        await conn.beginTransaction();
+        try {
+            await insertCancelRequest(conn, {
+                order_item_id, product_id, user_id, product_category,
+                quantity, cancel_reason, order_date, payment_status,
+            });
+
+            await conn.commit();
+            conn.release();
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            throw txErr;
+        }
 
         await safeNotify(
             user_id,
@@ -556,6 +486,7 @@ exports.cancelOrder = async (req, res) => {
 
         return res.json({ success: true, message: "Cancel request submitted.", cancel_status: "REQUESTED" });
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };
@@ -563,6 +494,9 @@ exports.cancelOrder = async (req, res) => {
 exports.getCancelStatus = async (req, res) => {
     try {
         const { order_item_id } = req.query;
+
+        if (!order_item_id)
+            return res.status(400).json({ success: false, message: "order_item_id required." });
 
         const [rows] = await pool.query(
             `SELECT cancel_status FROM cancel_heepit WHERE order_item_id = ? LIMIT 1`,
@@ -581,9 +515,16 @@ exports.getCancelStatus = async (req, res) => {
 exports.returnProduct = async (req, res) => {
     try {
         const {
-            order_item_id, user_id, order_id, product_id, quantity,
-            return_reason, order_date, payment_status,
+            session_token, order_item_id, order_id, product_id,
+            quantity, return_reason, order_date, payment_status,
         } = req.body;
+
+        const user_id = await authenticate(session_token);
+        if (!user_id) return unauthorized(res);
+
+        if (!order_item_id || !product_id) {
+            return res.status(400).json({ success: false, message: "order_item_id and product_id required." });
+        }
 
         const formattedOrderDate = formatMySQLDate(order_date);
         const status = payment_status !== "PAID" ? "PENDING" : payment_status;
@@ -603,39 +544,59 @@ exports.returnProduct = async (req, res) => {
 };
 
 exports.cancelWholeOrder = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const { session_token, order_id, cancel_reason } = req.body;
 
         const user_id = await authenticate(session_token);
-        if (!user_id) return unauthorized(res);
-
-        const [items] = await pool.query(
-            `SELECT order_item_id, product_id, product_type, quantity, payment_status, created_at
-             FROM order_items_heepit
-             WHERE order_id = ? AND order_status NOT IN ('CANCELLED', 'DELIVERED')`,
-            [order_id]
-        );
-
-        if (items.length === 0)
-            return res.status(400).json({ success: false, message: "No items available to cancel." });
-
-        for (const item of items) {
-            await insertCancelRequest({
-                order_item_id: item.order_item_id,
-                product_id: item.product_id,
-                user_id,
-                product_category: item.product_type,
-                quantity: item.quantity,
-                cancel_reason,
-                order_date: item.created_at,
-                payment_status: item.payment_status,
-            });
+        if (!user_id) {
+            conn.release();
+            return unauthorized(res);
         }
 
-        await pool.query(
-            `UPDATE orders_heepit SET order_status = 'REQUESTED' WHERE order_id = ?`,
-            [order_id]
+        const [items] = await conn.query(
+            `SELECT oi.order_item_id, oi.product_id, oi.product_type, oi.quantity,
+                    oi.payment_status, oi.created_at
+             FROM order_items_heepit oi
+             INNER JOIN orders_heepit o ON oi.order_id = o.order_id
+             WHERE oi.order_id = ?
+               AND o.user_id = ?
+               AND oi.order_status NOT IN ('CANCELLED', 'DELIVERED')`,
+            [order_id, user_id]
         );
+
+        if (items.length === 0) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "No items available to cancel." });
+        }
+
+        await conn.beginTransaction();
+        try {
+            for (const item of items) {
+                await insertCancelRequest(conn, {
+                    order_item_id: item.order_item_id,
+                    product_id: item.product_id,
+                    user_id,
+                    product_category: item.product_type,
+                    quantity: item.quantity,
+                    cancel_reason,
+                    order_date: item.created_at,
+                    payment_status: item.payment_status,
+                });
+            }
+
+            await conn.query(
+                `UPDATE orders_heepit SET order_status = 'REQUESTED' WHERE order_id = ?`,
+                [order_id]
+            );
+
+            await conn.commit();
+            conn.release();
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            throw txErr;
+        }
 
         await safeNotify(
             user_id,
@@ -650,6 +611,7 @@ exports.cancelWholeOrder = async (req, res) => {
             items_cancelled: items.length,
         });
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };
@@ -661,47 +623,65 @@ exports.getUserInfoForAdmin = async (req, res) => {
         if (!user_id)
             return res.status(400).json({ success: false, message: "user_id required." });
 
-        const [[user]] = await pool.query(
+        const [userRows] = await pool.query(
             `SELECT user_id, full_name, mobile_number, whatsapp_number, email
              FROM users_heepit WHERE user_id = ? LIMIT 1`,
             [user_id]
         );
 
-        if (!user)
+        if (!userRows.length)
             return res.status(404).json({ success: false, message: "User not found." });
 
         const [addresses] = await pool.query(
-            `SELECT * FROM user_address_heepit
+            `SELECT address_id, full_name, mobile_number, house_flat, area_street,
+                    landmark, pincode, city, state, latitude, longitude,
+                    address_type, is_primary
+             FROM user_address_heepit
              WHERE user_id = ?
              ORDER BY is_primary DESC, address_id ASC`,
             [user_id]
         );
 
-        return res.json({ success: true, user, addresses });
+        return res.json({ success: true, user: userRows[0], addresses });
     } catch (err) {
         return serverError(res, err);
     }
 };
 
 exports.adminPlaceOrder = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const {
             user_id, address_id, product_id, quantity, unit_price,
             making_charges, payment_method, payment_status, advance_amount,
         } = req.body;
 
-        if (!user_id || !address_id || !product_id || !quantity)
-            return res.status(400).json({ success: false, message: "user_id, address_id, product_id and quantity are required." });
+        if (!user_id || !address_id || !product_id || !quantity) {
+            conn.release();
+            return res.status(400).json({
+                success: false,
+                message: "user_id, address_id, product_id and quantity are required.",
+            });
+        }
 
-        const [[product]] = await pool.query(
-            `SELECT * FROM cards_heepit WHERE product_id = ? LIMIT 1`,
+        const qty = Number(quantity);
+        if (isNaN(qty) || qty <= 0) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "quantity must be > 0." });
+        }
+
+        const [productRows] = await conn.query(
+            `SELECT product_id, product_name, product_image1, product_price, product_category
+             FROM cards_heepit WHERE product_id = ? LIMIT 1`,
             [product_id]
         );
 
-        if (!product)
+        if (!productRows.length) {
+            conn.release();
             return res.status(404).json({ success: false, message: "Product not found." });
+        }
 
-        const qty = Number(quantity);
+        const product = productRows[0];
         const price = Number(unit_price) || Number(product.product_price) || 0;
         const making = Number(making_charges) || 0;
 
@@ -721,43 +701,53 @@ exports.adminPlaceOrder = async (req, res) => {
 
         const orderNumber = "AD" + Date.now();
 
-        const [orderResult] = await pool.query(
-            `INSERT INTO orders_heepit (
-                order_number, user_id, order_type, total_items, subtotal, discount,
-                gst, platform_fee, delivery_fee, total_amount, advance_amount,
-                remaining_amount, payment_method, payment_status, order_status,
-                address_id, is_hypo_used
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                orderNumber, user_id, "CARD", 1, subtotal, 0, gst, platformFee,
-                deliveryFee, totalAmount, advance, remaining, payment_method,
-                finalPaymentStatus, "PLACED", address_id, 0,
-            ]
-        );
+        await conn.beginTransaction();
+        try {
+            const [orderResult] = await conn.query(
+                `INSERT INTO orders_heepit (
+                    order_number, user_id, order_type, total_items, subtotal, discount,
+                    gst, platform_fee, delivery_fee, total_amount, advance_amount,
+                    remaining_amount, payment_method, payment_status, order_status,
+                    address_id, is_hypo_used
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    orderNumber, user_id, "CARD", 1, subtotal, 0, gst, platformFee,
+                    deliveryFee, totalAmount, advance, remaining, payment_method,
+                    finalPaymentStatus, "PLACED", address_id, 0,
+                ]
+            );
 
-        const order_id = orderResult.insertId;
+            const order_id = orderResult.insertId;
 
-        const [itemResult] = await pool.query(
-            `INSERT INTO order_items_heepit (
-                order_id, product_id, product_type, category, product_name,
-                product_image, unit_price, quantity, total_price,
-                order_status, payment_status, cancel_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                order_id, product_id, "CARD", product.product_category,
-                product.product_name, product.product_image1, price, qty,
-                itemTotal, "PLACED", finalPaymentStatus,
-                new Date(Date.now() + 24 * 60 * 60 * 1000),
-            ]
-        );
+            const [itemResult] = await conn.query(
+                `INSERT INTO order_items_heepit (
+                    order_id, product_id, product_type, category, product_name,
+                    product_image, unit_price, quantity, total_price,
+                    order_status, payment_status, cancel_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    order_id, product_id, "CARD", product.product_category,
+                    product.product_name, product.product_image1, price, qty,
+                    itemTotal, "PLACED", finalPaymentStatus,
+                    new Date(Date.now() + 24 * 60 * 60 * 1000),
+                ]
+            );
 
-        await upsertProcessingStatus(itemResult.insertId, "PLACED");
+            await upsertProcessingStatus(conn, itemResult.insertId, "PLACED");
 
-        await pool.query(
-            `INSERT INTO payment_heepit (order_id, user_id, payment_method, payment_status, amount)
-             VALUES (?, ?, ?, ?, ?)`,
-            [order_id, user_id, payment_method, finalPaymentStatus, advance > 0 ? advance : totalAmount]
-        );
+            await conn.query(
+                `INSERT INTO payment_heepit (order_id, user_id, payment_method, payment_status, amount)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [order_id, user_id, payment_method, finalPaymentStatus, advance > 0 ? advance : totalAmount]
+            );
+
+            await conn.commit();
+            conn.release();
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            throw txErr;
+        }
 
         await safeNotify(
             user_id,
@@ -773,6 +763,7 @@ exports.adminPlaceOrder = async (req, res) => {
             order_number: orderNumber,
         });
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };

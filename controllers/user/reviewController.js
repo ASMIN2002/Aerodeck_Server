@@ -23,43 +23,76 @@ function serverError(res, err, context = "Internal Server Error") {
     return res.status(500).json({ success: false, message: context });
 }
 
+const emptyQuery = () => Promise.resolve([[]]);
+
 exports.submitReview = async (req, res) => {
+    const conn = await pool.getConnection();
     try {
         const { session_token, order_item_id, product_id, rating, review_message } = req.body;
 
         const user_id = await authenticate(session_token);
-        if (!user_id)
+        if (!user_id) {
+            conn.release();
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
+        }
 
-        const [exists] = await pool.query(
-            `SELECT rating_id FROM ratings_heepit WHERE order_item_id = ?`,
+        if (!order_item_id || !product_id || !rating) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "order_item_id, product_id, and rating are required." });
+        }
+
+        const ratingNum = Number(rating);
+        if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+            conn.release();
+            return res.status(400).json({ success: false, message: "Rating must be between 1 and 5." });
+        }
+
+        const [exists] = await conn.query(
+            `SELECT rating_id FROM ratings_heepit WHERE order_item_id = ? LIMIT 1`,
             [order_item_id]
         );
 
-        if (exists.length > 0)
+        if (exists.length > 0) {
+            conn.release();
             return res.json({ success: false, message: "You have already reviewed this product." });
+        }
 
-        await pool.query(
-            `INSERT INTO ratings_heepit (order_item_id, product_id, user_id, rating, review_message)
-             VALUES (?, ?, ?, ?, ?)`,
-            [order_item_id, product_id, user_id, rating, review_message]
-        );
+        await conn.beginTransaction();
 
-        const [[avg]] = await pool.query(
-            `SELECT ROUND(AVG(rating), 2) AS average_rating
-             FROM ratings_heepit WHERE product_id = ?`,
-            [product_id]
-        );
+        try {
+            await conn.query(
+                `INSERT INTO ratings_heepit (order_item_id, product_id, user_id, rating, review_message)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [order_item_id, product_id, user_id, ratingNum, review_message || null]
+            );
 
-        const { table, idCol, ratingCol } = getProductConfig(product_id);
+            const [[avg]] = await conn.query(
+                `SELECT ROUND(AVG(rating), 2) AS average_rating
+                 FROM ratings_heepit WHERE product_id = ?`,
+                [product_id]
+            );
 
-        await pool.query(
-            `UPDATE ${table} SET ${ratingCol} = ? WHERE ${idCol} = ?`,
-            [avg.average_rating, product_id]
-        );
+            const { table, idCol, ratingCol } = getProductConfig(product_id);
 
-        return res.json({ success: true, message: "Review submitted successfully." });
+            await conn.query(
+                `UPDATE ${table} SET ${ratingCol} = ? WHERE ${idCol} = ?`,
+                [avg.average_rating, product_id]
+            );
+
+            await conn.commit();
+            conn.release();
+
+            return res.json({ success: true, message: "Review submitted successfully." });
+        } catch (txErr) {
+            await conn.rollback();
+            conn.release();
+            if (txErr.code === "ER_DUP_ENTRY") {
+                return res.json({ success: false, message: "You have already reviewed this product." });
+            }
+            throw txErr;
+        }
     } catch (err) {
+        try { conn.release(); } catch { }
         return serverError(res, err);
     }
 };
@@ -74,8 +107,9 @@ exports.getReview = async (req, res) => {
             return res.status(401).json({ success: false, message: "Invalid or expired session." });
 
         const [rows] = await pool.query(
-            `SELECT rating, review_message FROM ratings_heepit WHERE order_item_id = ?`,
-            [order_item_id]
+            `SELECT rating, review_message FROM ratings_heepit
+             WHERE order_item_id = ? AND user_id = ? LIMIT 1`,
+            [order_item_id, user_id]
         );
 
         if (rows.length === 0)
@@ -95,6 +129,8 @@ exports.getReview = async (req, res) => {
 exports.getAllReviews = async (req, res) => {
     try {
         const { product_id } = req.params;
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+        const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
         const [[summary], [reviews]] = await Promise.all([
             pool.query(
@@ -103,21 +139,28 @@ exports.getAllReviews = async (req, res) => {
                     COUNT(CASE WHEN rating = 4 THEN 1 END) AS four,
                     COUNT(CASE WHEN rating = 3 THEN 1 END) AS three,
                     COUNT(CASE WHEN rating = 2 THEN 1 END) AS two,
-                    COUNT(CASE WHEN rating = 1 THEN 1 END) AS one
+                    COUNT(CASE WHEN rating = 1 THEN 1 END) AS one,
+                    COUNT(*) AS total
                  FROM ratings_heepit WHERE product_id = ?`,
                 [product_id]
             ),
             pool.query(
-                `SELECT u.full_name, u.profile_image, r.rating, r.review_message
+                `SELECT u.full_name, u.profile_image, r.rating, r.review_message, r.created_at
                  FROM ratings_heepit r
-                 INNER JOIN users_heepit u ON r.user_id = u.user_id
+                 LEFT JOIN users_heepit u ON r.user_id = u.user_id
                  WHERE r.product_id = ?
-                 ORDER BY r.rating DESC`,
-                [product_id]
+                 ORDER BY r.rating DESC, r.rating_id DESC
+                 LIMIT ? OFFSET ?`,
+                [product_id, limit, offset]
             ),
         ]);
 
-        return res.json({ success: true, summary, reviews });
+        return res.json({
+            success: true,
+            summary: summary[0] || {},
+            reviews,
+            pagination: { limit, offset, count: reviews.length },
+        });
     } catch (err) {
         return serverError(res, err);
     }
@@ -130,7 +173,7 @@ exports.getTopReviews = async (req, res) => {
         const [reviews] = await pool.query(
             `SELECT u.full_name, u.profile_image, r.rating, r.review_message
              FROM ratings_heepit r
-             INNER JOIN users_heepit u ON r.user_id = u.user_id
+             LEFT JOIN users_heepit u ON r.user_id = u.user_id
              WHERE r.product_id = ?
              ORDER BY r.rating DESC, r.rating_id DESC
              LIMIT 5`,
@@ -155,9 +198,9 @@ exports.getMyReviewImages = async (req, res) => {
         const [rows] = await pool.query(
             `SELECT media_id, image_url, public_id
              FROM review_media_heepit
-             WHERE order_item_id = ?
+             WHERE order_item_id = ? AND user_id = ?
              ORDER BY media_id ASC`,
-            [order_item_id]
+            [order_item_id, user_id]
         );
 
         return res.json({ success: true, images: rows });
@@ -169,16 +212,19 @@ exports.getMyReviewImages = async (req, res) => {
 exports.getReviewMedia = async (req, res) => {
     try {
         const { product_id } = req.params;
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+        const offset = Math.max(parseInt(req.query.offset) || 0, 0);
 
         const [rows] = await pool.query(
             `SELECT rm.media_id, rm.image_url, rm.upload_date, r.rating, u.full_name, u.profile_image
              FROM review_media_heepit rm
              INNER JOIN ratings_heepit r
                  ON rm.order_item_id = r.order_item_id AND rm.user_id = r.user_id
-             INNER JOIN users_heepit u ON rm.user_id = u.user_id
+             LEFT JOIN users_heepit u ON rm.user_id = u.user_id
              WHERE rm.product_id = ?
-             ORDER BY rm.upload_date DESC`,
-            [product_id]
+             ORDER BY rm.upload_date DESC
+             LIMIT ? OFFSET ?`,
+            [product_id, limit, offset]
         );
 
         return res.json({ success: true, images: rows });
@@ -232,25 +278,25 @@ exports.getMyReviews = async (req, res) => {
                     `SELECT gift_id AS id, gift_name AS name, gift_price AS price, gift_image1 AS image FROM food_heepit WHERE gift_id IN (?)`,
                     [giftIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
             shopIds.length
                 ? pool.query(
                     `SELECT shop_id AS id, shop_name AS name, shop_price AS price, shop_image1 AS image FROM shop_heepit WHERE shop_id IN (?)`,
                     [shopIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
             medicineIds.length
                 ? pool.query(
                     `SELECT medicine_id AS id, medicine_name AS name, medicine_price AS price, medicine_image1 AS image FROM medicine_heepit WHERE medicine_id IN (?)`,
                     [medicineIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
             cardIds.length
                 ? pool.query(
                     `SELECT product_id AS id, product_name AS name, product_price AS price, product_image1 AS image FROM cards_heepit WHERE product_id IN (?)`,
                     [cardIds]
                 )
-                : Promise.resolve([[]]),
+                : emptyQuery(),
         ]);
 
         const giftsMap = new Map(gifts.map((g) => [String(g.id), { ...g, type: "gifts" }]));
@@ -258,23 +304,23 @@ exports.getMyReviews = async (req, res) => {
         const medicinesMap = new Map(medicines.map((m) => [String(m.id), { ...m, type: "medicine" }]));
         const cardsMap = new Map(cards.map((c) => [String(c.id), { ...c, type: "products" }]));
 
-        const data = reviews.map((r) => {
+        const data = [];
+        for (const r of reviews) {
             const id = String(r.product_id);
-
             let product = null;
             if (id.startsWith("G")) product = giftsMap.get(id);
             else if (id.startsWith("S")) product = shopsMap.get(id);
             else if (id.startsWith("M")) product = medicinesMap.get(id);
             else product = cardsMap.get(id);
 
-            return {
+            data.push({
                 ...r,
                 product_name: product?.name || "Unknown",
                 product_price: product?.price || 0,
                 product_image: product?.image || "",
                 product_type: product?.type || "products",
-            };
-        });
+            });
+        }
 
         return res.json({ success: true, data });
     } catch (err) {
